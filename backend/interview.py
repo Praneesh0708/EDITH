@@ -1,20 +1,22 @@
 from fastapi import APIRouter, UploadFile, File
 
+import cv2
+import numpy as np
+
 from backend.services.answer_analyzer import analyze_answer
 from backend.services.question_engine import generate_next_question
 from backend.services.session_manager import (
     create_session,
     get_session,
     add_interaction,
+    add_face_event,
     end_session
 )
 from backend.services.interview_report import generate_interview_report
 from backend.services.voice_analyzer import analyze_voice
 from backend.services.speech_service import transcribe_audio
-from fastapi import APIRouter, UploadFile, File
 from backend.services.face_analyzer import analyze_face
-import cv2
-import numpy as np
+
 
 router = APIRouter(
     prefix="/interview",
@@ -28,6 +30,7 @@ router = APIRouter(
 
 @router.get("/")
 def interview_home():
+
     return {
         "status": "success",
         "message": "EDITH Interview Engine is ready"
@@ -111,7 +114,10 @@ def submit_answer(data: dict):
         analysis
     )
 
-    # Store next question
+    # --------------------------------------------------------
+    # Store Next Question
+    # --------------------------------------------------------
+
     session["questions"].append(
         next_question["question"]
     )
@@ -232,17 +238,15 @@ async def voice_answer(
     answer = transcribe_audio(filename)
 
     # --------------------------------------------------------
-    # Convert Whisper Dictionary Result to Text
+    # Convert Whisper Result to Text
     # --------------------------------------------------------
 
     if isinstance(answer, dict):
         answer = answer.get("text", "")
 
-    # Make sure answer is always a string
     if not isinstance(answer, str):
         answer = str(answer)
 
-    # Remove unnecessary spaces
     answer = answer.strip()
 
     # --------------------------------------------------------
@@ -257,7 +261,7 @@ async def voice_answer(
         question = session["questions"][question_number - 1]
 
     # --------------------------------------------------------
-    # Analyze Transcribed Answer
+    # Analyze Answer
     # --------------------------------------------------------
 
     analysis = analyze_answer(
@@ -286,14 +290,13 @@ async def voice_answer(
         analysis
     )
 
-    # Store next question
+    # --------------------------------------------------------
+    # Store Next Question
+    # --------------------------------------------------------
+
     session["questions"].append(
         next_question["question"]
     )
-
-    # --------------------------------------------------------
-    # Return Result
-    # --------------------------------------------------------
 
     return {
         "status": "success",
@@ -304,20 +307,49 @@ async def voice_answer(
         "analysis": analysis,
         "next_question": next_question
     }
+
+
+# ============================================================
+# Face Analysis
+# ============================================================
+
 @router.post("/face")
 async def analyze_face_frame(
+    session_id: str,
     image_file: UploadFile = File(...)
 ):
-    # Read uploaded image
+
+    # --------------------------------------------------------
+    # Get Interview Session
+    # --------------------------------------------------------
+
+    session = get_session(session_id)
+
+    if not session:
+        return {
+            "status": "error",
+            "message": "Invalid session ID"
+        }
+
+    # --------------------------------------------------------
+    # Read Uploaded Image
+    # --------------------------------------------------------
+
     image_bytes = await image_file.read()
 
-    # Convert bytes to NumPy array
+    # --------------------------------------------------------
+    # Convert Image Bytes to NumPy Array
+    # --------------------------------------------------------
+
     image_array = np.frombuffer(
         image_bytes,
         np.uint8
     )
 
-    # Decode image
+    # --------------------------------------------------------
+    # Decode Image
+    # --------------------------------------------------------
+
     image = cv2.imdecode(
         image_array,
         cv2.IMREAD_COLOR
@@ -329,11 +361,30 @@ async def analyze_face_frame(
             "message": "Invalid image file"
         }
 
-    # Analyze face
+    # --------------------------------------------------------
+    # Analyze Face
+    # --------------------------------------------------------
+
     result = analyze_face(image)
+
+    # --------------------------------------------------------
+    # Store Face Event in Session
+    # --------------------------------------------------------
+
+    add_face_event(
+        session_id,
+        result.get("face_detected", False),
+        result.get("face_count", 0)
+    )
+
+    # --------------------------------------------------------
+    # Return Result
+    # --------------------------------------------------------
 
     return {
         "status": "success",
-        "message": "Face analyzed",
+        "message": "Face analyzed and stored",
+        "session_id": session_id,
         "face_analysis": result
     }
+
