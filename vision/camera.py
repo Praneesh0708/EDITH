@@ -1,73 +1,108 @@
 import cv2
+import requests
 
-# Load OpenCV's built-in face detector
-face_detector = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
+
+BACKEND_URL = "http://127.0.0.1:8000/interview/face"
 
 
 def start_camera():
+
     camera = cv2.VideoCapture(0)
 
     if not camera.isOpened():
         print("ERROR: Could not open camera.")
         return
 
-    print("EDITH face detection started.")
+    print("EDITH camera started.")
+    print("Backend connection: ACTIVE")
     print("Press Q to close.")
+    print("Press S to send a frame to backend.")
 
     while True:
+
         success, frame = camera.read()
 
         if not success:
             print("ERROR: Could not read camera frame.")
             break
 
-        # Convert the frame to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # Detect faces
-        faces = face_detector.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(60, 60)
+        # Display camera
+        cv2.imshow(
+            "EDITH - Camera",
+            frame
         )
 
-        # Draw a box around each detected face
-        for (x, y, w, h) in faces:
-            cv2.rectangle(
-                frame,
-                (x, y),
-                (x + w, y + h),
-                (0, 255, 0),
-                2
+        key = cv2.waitKey(1) & 0xFF
+
+        # Send current frame to FastAPI
+        if key == ord("s"):
+
+            success, encoded_image = cv2.imencode(
+                ".jpg",
+                frame
             )
 
-            cv2.putText(
-                frame,
-                "Face detected",
-                (x, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 0),
-                2
-            )
+            if not success:
+                print("ERROR: Could not encode frame.")
+                continue
 
-        # Display number of detected faces
-        cv2.putText(
-            frame,
-            f"Faces: {len(faces)}",
-            (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 255),
-            2
-        )
+            try:
 
-        cv2.imshow("EDITH - Face Detection", frame)
+                response = requests.post(
+                    BACKEND_URL,
+                    files={
+                        "image_file": (
+                            "camera.jpg",
+                            encoded_image.tobytes(),
+                            "image/jpeg"
+                        )
+                    },
+                    timeout=10
+                )
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+                print("\n-----------------------------")
+                print("Backend Status:", response.status_code)
+
+                if response.status_code == 200:
+
+                    result = response.json()
+
+                    print("Backend Response:")
+                    print(result)
+
+                    face_analysis = result.get(
+                        "face_analysis",
+                        {}
+                    )
+
+                    print(
+                        "Face detected:",
+                        face_analysis.get("face_detected")
+                    )
+
+                    print(
+                        "Face count:",
+                        face_analysis.get("face_count")
+                    )
+
+                else:
+
+                    print(
+                        "Backend Error:",
+                        response.text
+                    )
+
+                print("-----------------------------\n")
+
+            except requests.exceptions.RequestException as error:
+
+                print(
+                    "ERROR: Backend connection failed:",
+                    error
+                )
+
+        # Q = quit
+        if key == ord("q"):
             break
 
     camera.release()

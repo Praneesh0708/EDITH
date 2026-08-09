@@ -11,7 +11,10 @@ from backend.services.session_manager import (
 from backend.services.interview_report import generate_interview_report
 from backend.services.voice_analyzer import analyze_voice
 from backend.services.speech_service import transcribe_audio
-
+from fastapi import APIRouter, UploadFile, File
+from backend.services.face_analyzer import analyze_face
+import cv2
+import numpy as np
 
 router = APIRouter(
     prefix="/interview",
@@ -300,4 +303,37 @@ async def voice_answer(
         "transcribed_answer": answer,
         "analysis": analysis,
         "next_question": next_question
+    }
+@router.post("/face")
+async def analyze_face_frame(
+    image_file: UploadFile = File(...)
+):
+    # Read uploaded image
+    image_bytes = await image_file.read()
+
+    # Convert bytes to NumPy array
+    image_array = np.frombuffer(
+        image_bytes,
+        np.uint8
+    )
+
+    # Decode image
+    image = cv2.imdecode(
+        image_array,
+        cv2.IMREAD_COLOR
+    )
+
+    if image is None:
+        return {
+            "status": "error",
+            "message": "Invalid image file"
+        }
+
+    # Analyze face
+    result = analyze_face(image)
+
+    return {
+        "status": "success",
+        "message": "Face analyzed",
+        "face_analysis": result
     }
