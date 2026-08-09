@@ -1,6 +1,5 @@
 from fastapi import FastAPI
-
-from interview import router as interview_router
+from backend.interview import router as interview_router
 
 
 app = FastAPI(
