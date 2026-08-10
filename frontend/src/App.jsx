@@ -3,44 +3,219 @@ import "./App.css";
 
 function App() {
   const videoRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [error, setError] = useState("");
   const [backendStatus, setBackendStatus] = useState("Checking...");
+
+  const [sessionId, setSessionId] = useState("");
+  const [question, setQuestion] = useState("");
+  const [questionNumber, setQuestionNumber] = useState(0);
+
+  const [recording, setRecording] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [transcribedAnswer, setTranscribedAnswer] = useState("");
+
   useEffect(() => {
-  fetch("http://127.0.0.1:8000/api/status")
-    .then((response) => response.json())
-    .then((data) => {
-      setBackendStatus(
-        data.backend === "online" ? "Backend Connected" : "Backend Offline"
-      );
-    })
-    .catch(() => {
-      setBackendStatus("Backend Offline");
-    });
-}, []);
+    fetch("http://127.0.0.1:8000/api/status")
+      .then((response) => response.json())
+      .then((data) => {
+        setBackendStatus(
+          data.backend === "online"
+            ? "Backend Connected"
+            : "Backend Offline"
+        );
+      })
+      .catch(() => {
+        setBackendStatus("Backend Offline");
+      });
+  }, []);
 
   const startInterview = async () => {
     try {
       setError("");
 
+      // Start camera + microphone
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
 
       videoRef.current.srcObject = stream;
+
+      // Start interview session in backend
+      const response = await fetch(
+        "http://127.0.0.1:8000/interview/start",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to start interview");
+      }
+
+      const data = await response.json();
+
+      if (data.status !== "success") {
+        throw new Error(data.message || "Interview could not be started");
+      }
+
+      // Store interview information
+      setSessionId(data.session_id);
+      setQuestion(data.question);
+      setQuestionNumber(data.question_number);
+
       setInterviewStarted(true);
     } catch (err) {
       console.error(err);
+
       setError(
-        "Camera or microphone permission was denied. Please allow access and try again."
+        err.message ||
+          "Camera, microphone, or backend connection failed."
       );
     }
   };
 
+  const startRecording = () => {
+    try {
+      const stream = videoRef.current?.srcObject;
+
+      if (!stream) {
+        setError("Camera and microphone are not active.");
+        return;
+      }
+
+      audioChunksRef.current = [];
+
+      // Get only the microphone track
+      const audioStream = new MediaStream(
+        stream.getAudioTracks()
+      );
+
+      let recorder;
+
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+        recorder = new MediaRecorder(audioStream, {
+          mimeType: "audio/webm;codecs=opus",
+        });
+      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+        recorder = new MediaRecorder(audioStream, {
+          mimeType: "audio/webm",
+        });
+      } else {
+        recorder = new MediaRecorder(audioStream);
+      }
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(
+          audioChunksRef.current,
+          {
+            type:recorder.mimeType,
+          }
+        );
+
+        await sendVoiceAnswer(audioBlob);
+      };
+
+      recorder.start();
+
+      setRecording(true);
+      setError("");
+    } catch (err) {
+      console.error(err);
+      setError("Unable to start voice recording.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  };
+
+  const sendVoiceAnswer = async (audioBlob) => {
+    try {
+      console.log("Audio blob:", audioBlob);
+      console.log("Audio size:", audioBlob.size);
+      console.log("Audio type:", audioBlob.type);
+      setProcessing(true);
+      setError("");
+
+      const formData = new FormData();
+
+      formData.append("session_id", sessionId);
+
+      formData.append(
+        "audio_file",
+        audioBlob,
+        "answer.webm"
+      );
+
+      const response = await fetch(
+        "http://127.0.0.1:8000/interview/voice-answer",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Voice answer failed: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+
+      if (data.status !== "success") {
+        throw new Error(
+          data.message || "Voice answer processing failed."
+        );
+      }
+
+      setTranscribedAnswer(
+        data.transcribed_answer || ""
+      );
+
+      // Update next question
+      if (data.next_question) {
+        setQuestion(
+          data.next_question.question || ""
+        );
+      }
+
+      setQuestionNumber(
+        (previous) => previous + 1
+      );
+
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   return (
-    <div className="edith-app">
+    <div className="app">
 
       <header className="header">
         <div>
@@ -50,7 +225,9 @@ function App() {
 
         <div className="status">
           <span className="status-dot"></span>
-         {interviewStarted ? "Interview Active" : backendStatus}
+          {interviewStarted
+            ? "Interview Active"
+            : backendStatus}
         </div>
       </header>
 
@@ -97,7 +274,9 @@ function App() {
 
             <div className="card">
               <h3>🎯 Interview Type</h3>
-              <p>Choose the type of interview you want to practice.</p>
+              <p>
+                Choose the type of interview you want to practice.
+              </p>
 
               <select>
                 <option>Select Interview Type</option>
@@ -130,7 +309,11 @@ function App() {
               autoPlay
               playsInline
               muted
-              className={interviewStarted ? "camera-video" : "hidden"}
+              className={
+                interviewStarted
+                  ? "camera-video"
+                  : "hidden"
+              }
             />
 
           </div>
@@ -143,25 +326,67 @@ function App() {
                 : "Ready for your interview?"}
             </h2>
 
-            <p>
-              {interviewStarted
-                ? "Camera and microphone are active. The AI interview engine will be connected next."
-                : "EDITH will analyze your answers, communication, technical knowledge and identify areas for improvement."}
-            </p>
+            {interviewStarted && (
+              <>
+                <div className="question-box">
+                  <p>
+                    Question {questionNumber}
+                  </p>
 
-            {!interviewStarted && (
-              <button
-                className="start-button"
-                onClick={startInterview}
-              >
-                🎤 Start Interview
-              </button>
+                  <h3>{question}</h3>
+                </div>
+
+                <div className="voice-controls">
+
+                  {!recording && !processing && (
+                    <button
+                      className="start-button"
+                      onClick={startRecording}
+                    >
+                      🎤 Start Answer
+                    </button>
+                  )}
+
+                  {recording && (
+                    <button
+                      className="start-button"
+                      onClick={stopRecording}
+                    >
+                      ⏹ Stop Recording
+                    </button>
+                  )}
+
+                  {processing && (
+                    <div className="recording-status">
+                      🧠 EDITH is analyzing your answer...
+                    </div>
+                  )}
+
+                </div>
+
+                {transcribedAnswer && (
+                  <div className="answer-box">
+                    <h3>Your Answer</h3>
+                    <p>{transcribedAnswer}</p>
+                  </div>
+                )}
+              </>
             )}
 
-            {interviewStarted && (
-              <div className="recording-status">
-                🔴 Interview Active
-              </div>
+            {!interviewStarted && (
+              <>
+                <p>
+                  EDITH will analyze your answers, communication,
+                  technical knowledge and identify areas for improvement.
+                </p>
+
+                <button
+                  className="start-button"
+                  onClick={startInterview}
+                >
+                  🎤 Start Interview
+                </button>
+              </>
             )}
 
             {error && (
