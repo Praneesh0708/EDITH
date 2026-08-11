@@ -32,6 +32,19 @@ function App() {
         setBackendStatus("Backend Offline");
       });
   }, []);
+  const speakQuestion = (text) => {
+    if (!text) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   const startInterview = async () => {
     try {
@@ -72,6 +85,7 @@ function App() {
       setQuestionNumber(data.question_number);
 
       setInterviewStarted(true);
+      speakQuestion(data.question);
     } catch (err) {
       console.error(err);
 
@@ -196,12 +210,14 @@ function App() {
       );
 
       // Update next question
-      if (data.next_question) {
-        setQuestion(
-          data.next_question.question || ""
-        );
-      }
+     if (data.next_question) {
+        const nextQuestion =
+         data.next_question.question || "";
 
+        setQuestion(nextQuestion);
+
+        speakQuestion(nextQuestion);
+      }
       setQuestionNumber(
         (previous) => previous + 1
       );
