@@ -13,7 +13,7 @@ function App() {
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState("");
   const [questionNumber, setQuestionNumber] = useState(0);
-
+  const [speaking, setSpeaking] = useState(false);
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [transcribedAnswer, setTranscribedAnswer] = useState("");
@@ -32,16 +32,27 @@ function App() {
         setBackendStatus("Backend Offline");
       });
   }, []);
-  const speakQuestion = (text) => {
+const speakQuestion = (text) => {
     if (!text) return;
 
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-
     utterance.rate = 0.95;
     utterance.pitch = 1;
     utterance.volume = 1;
+
+    utterance.onstart = () => {
+      setSpeaking(true);
+    };
+
+    utterance.onend = () => {
+      setSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setSpeaking(false);
+    };
 
     window.speechSynthesis.speak(utterance);
   };
@@ -97,6 +108,9 @@ function App() {
   };
 
   const startRecording = () => {
+    if (speaking) {
+     return;
+    }
     try {
       const stream = videoRef.current?.srcObject;
 
@@ -362,7 +376,11 @@ function App() {
                       🎤 Start Answer
                     </button>
                   )}
-
+                  {speaking && (
+                    <div className="recording-status">
+                      🔊 EDITH is speaking...
+                    </div>
+                  )}
                   {recording && (
                     <button
                       className="start-button"
