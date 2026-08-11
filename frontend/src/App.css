@@ -186,3 +186,53 @@ footer {
   border-radius: 8px;
   background: #351c24;
 }
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.question-header span {
+  font-weight: 600;
+}
+
+.speaking-label {
+  font-size: 14px;
+}
+
+.question-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  background: #e5e7eb;
+}
+
+.question-progress-bar {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.4s ease;
+}
+
+.session-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 15px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.voice-status {
+  margin-top: 15px;
+}
+
+.recording-status {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+}

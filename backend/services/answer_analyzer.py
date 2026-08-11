@@ -3,7 +3,8 @@ import re
 
 def analyze_answer(question: str, answer: str):
     """
-    Basic Answer Analysis Engine for EDITH.
+    EDITH Step 32.2
+    Structured Answer Analysis Engine.
     """
 
     question = question.strip()
@@ -17,18 +18,18 @@ def analyze_answer(question: str, answer: str):
             "completeness": 0,
             "keywords": [],
             "overall_score": 0,
-            "feedback": "No answer was provided."
+            "feedback": "No answer was provided.",
+            "strength": "No answer provided",
+            "weakness": "The question was not answered.",
+            "knowledge_gap": "Unable to determine",
+            "recommended_difficulty": "easy"
         }
 
-    # --------------------------------
     # Word count
-    # --------------------------------
     words = answer.split()
     word_count = len(words)
 
-    # --------------------------------
-    # Clarity Analysis
-    # --------------------------------
+    # Clarity analysis
     sentences = re.split(r"[.!?]+", answer)
     sentences = [s.strip() for s in sentences if s.strip()]
 
@@ -44,9 +45,7 @@ def analyze_answer(question: str, answer: str):
     else:
         clarity = 5
 
-    # --------------------------------
-    # Completeness Analysis
-    # --------------------------------
+    # Completeness analysis
     if word_count >= 80:
         completeness = 10
     elif word_count >= 50:
@@ -58,9 +57,7 @@ def analyze_answer(question: str, answer: str):
     else:
         completeness = 2
 
-    # --------------------------------
-    # Keyword Detection
-    # --------------------------------
+    # Keyword detection
     common_keywords = [
         "python",
         "java",
@@ -88,15 +85,19 @@ def analyze_answer(question: str, answer: str):
         if keyword in answer_lower
     ]
 
-    # --------------------------------
-    # Relevance Analysis
-    # --------------------------------
+    # Relevance analysis
     question_words = set(
-        re.findall(r"\b[a-zA-Z]{4,}\b", question.lower())
+        re.findall(
+            r"\b[a-zA-Z]{4,}\b",
+            question.lower()
+        )
     )
 
     answer_words = set(
-        re.findall(r"\b[a-zA-Z]{4,}\b", answer_lower)
+        re.findall(
+            r"\b[a-zA-Z]{4,}\b",
+            answer_lower
+        )
     )
 
     overlap = question_words.intersection(answer_words)
@@ -110,17 +111,57 @@ def analyze_answer(question: str, answer: str):
     else:
         relevance = 5
 
-    # --------------------------------
-    # Overall Score
-    # --------------------------------
+    # Overall score
     overall_score = round(
         (relevance + clarity + completeness) / 3,
         1
     )
 
-    # --------------------------------
+    # Strength detection
+    if relevance >= 8:
+        strength = "Strong relevance to the question"
+    elif clarity >= 8:
+        strength = "Clear communication"
+    elif completeness >= 8:
+        strength = "Good level of detail"
+    elif detected_keywords:
+        strength = "Uses relevant concepts"
+    else:
+        strength = "Shows an attempt to answer the question"
+
+    # Weakness detection
+    if relevance < 8:
+        weakness = "The answer could connect more directly to the question"
+    elif clarity < 8:
+        weakness = "The explanation could be clearer and more structured"
+    elif completeness < 8:
+        weakness = "The answer needs more supporting detail or examples"
+    elif not detected_keywords:
+        weakness = "Few relevant concepts were identified"
+    else:
+        weakness = "No major weakness detected"
+
+    # Knowledge gap detection
+    if completeness <= 4:
+        knowledge_gap = "Needs deeper explanation of the topic"
+    elif relevance <= 5:
+        knowledge_gap = "Needs better understanding of the question topic"
+    elif clarity <= 5:
+        knowledge_gap = "Needs improvement in structured explanation"
+    elif not detected_keywords:
+        knowledge_gap = "Relevant concepts were not demonstrated"
+    else:
+        knowledge_gap = "No major knowledge gap detected"
+
+    # Recommended difficulty
+    if overall_score >= 8:
+        recommended_difficulty = "hard"
+    elif overall_score >= 6:
+        recommended_difficulty = "medium"
+    else:
+        recommended_difficulty = "easy"
+
     # Feedback
-    # --------------------------------
     feedback = []
 
     if relevance >= 8:
@@ -150,11 +191,16 @@ def analyze_answer(question: str, answer: str):
             "Add more details, examples, or specific experiences."
         )
 
+    # Final result
     return {
         "relevance": relevance,
         "clarity": clarity,
         "completeness": completeness,
         "keywords": detected_keywords,
         "overall_score": overall_score,
-        "feedback": " ".join(feedback)
+        "feedback": " ".join(feedback),
+        "strength": strength,
+        "weakness": weakness,
+        "knowledge_gap": knowledge_gap,
+        "recommended_difficulty": recommended_difficulty
     }

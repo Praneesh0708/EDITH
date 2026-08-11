@@ -13,10 +13,16 @@ function App() {
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState("");
   const [questionNumber, setQuestionNumber] = useState(0);
-  const [speaking, setSpeaking] = useState(false);
+
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+
   const [transcribedAnswer, setTranscribedAnswer] = useState("");
+
+  // --------------------------------------------------------
+  // Check Backend
+  // --------------------------------------------------------
 
   useEffect(() => {
     fetch("http://127.0.0.1:8000/api/status")
@@ -32,12 +38,18 @@ function App() {
         setBackendStatus("Backend Offline");
       });
   }, []);
-const speakQuestion = (text) => {
+
+  // --------------------------------------------------------
+  // EDITH Text-to-Speech
+  // --------------------------------------------------------
+
+  const speakQuestion = (text) => {
     if (!text) return;
 
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
+
     utterance.rate = 0.95;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -57,11 +69,15 @@ const speakQuestion = (text) => {
     window.speechSynthesis.speak(utterance);
   };
 
+  // --------------------------------------------------------
+  // Start Interview
+  // --------------------------------------------------------
+
   const startInterview = async () => {
     try {
       setError("");
 
-      // Start camera + microphone
+      // Camera + Microphone
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
@@ -69,7 +85,7 @@ const speakQuestion = (text) => {
 
       videoRef.current.srcObject = stream;
 
-      // Start interview session in backend
+      // Start backend interview session
       const response = await fetch(
         "http://127.0.0.1:8000/interview/start",
         {
@@ -87,15 +103,19 @@ const speakQuestion = (text) => {
       const data = await response.json();
 
       if (data.status !== "success") {
-        throw new Error(data.message || "Interview could not be started");
+        throw new Error(
+          data.message || "Interview could not be started"
+        );
       }
 
-      // Store interview information
+      // Store session information
       setSessionId(data.session_id);
       setQuestion(data.question);
       setQuestionNumber(data.question_number);
 
       setInterviewStarted(true);
+
+      // EDITH speaks first question
       speakQuestion(data.question);
     } catch (err) {
       console.error(err);
@@ -107,10 +127,15 @@ const speakQuestion = (text) => {
     }
   };
 
+  // --------------------------------------------------------
+  // Start Voice Recording
+  // --------------------------------------------------------
+
   const startRecording = () => {
     if (speaking) {
-     return;
+      return;
     }
+
     try {
       const stream = videoRef.current?.srcObject;
 
@@ -121,18 +146,24 @@ const speakQuestion = (text) => {
 
       audioChunksRef.current = [];
 
-      // Get only the microphone track
+      // Use only microphone audio
       const audioStream = new MediaStream(
         stream.getAudioTracks()
       );
 
       let recorder;
 
-      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+      if (
+        MediaRecorder.isTypeSupported(
+          "audio/webm;codecs=opus"
+        )
+      ) {
         recorder = new MediaRecorder(audioStream, {
           mimeType: "audio/webm;codecs=opus",
         });
-      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+      } else if (
+        MediaRecorder.isTypeSupported("audio/webm")
+      ) {
         recorder = new MediaRecorder(audioStream, {
           mimeType: "audio/webm",
         });
@@ -152,9 +183,13 @@ const speakQuestion = (text) => {
         const audioBlob = new Blob(
           audioChunksRef.current,
           {
-            type:recorder.mimeType,
+            type: recorder.mimeType,
           }
         );
+
+        console.log("Audio blob:", audioBlob);
+        console.log("Audio size:", audioBlob.size);
+        console.log("Audio type:", audioBlob.type);
 
         await sendVoiceAnswer(audioBlob);
       };
@@ -163,11 +198,16 @@ const speakQuestion = (text) => {
 
       setRecording(true);
       setError("");
+      setTranscribedAnswer("");
     } catch (err) {
       console.error(err);
       setError("Unable to start voice recording.");
     }
   };
+
+  // --------------------------------------------------------
+  // Stop Voice Recording
+  // --------------------------------------------------------
 
   const stopRecording = () => {
     if (
@@ -179,11 +219,12 @@ const speakQuestion = (text) => {
     }
   };
 
+  // --------------------------------------------------------
+  // Send Voice Answer
+  // --------------------------------------------------------
+
   const sendVoiceAnswer = async (audioBlob) => {
     try {
-      console.log("Audio blob:", audioBlob);
-      console.log("Audio size:", audioBlob.size);
-      console.log("Audio type:", audioBlob.type);
       setProcessing(true);
       setError("");
 
@@ -206,6 +247,13 @@ const speakQuestion = (text) => {
       );
 
       if (!response.ok) {
+        const errorText = await response.text();
+
+        console.error(
+          "Voice answer error:",
+          errorText
+        );
+
         throw new Error(
           `Voice answer failed: ${response.status}`
         );
@@ -215,27 +263,33 @@ const speakQuestion = (text) => {
 
       if (data.status !== "success") {
         throw new Error(
-          data.message || "Voice answer processing failed."
+          data.message ||
+            "Voice answer processing failed."
         );
       }
 
+      // Display transcription
       setTranscribedAnswer(
         data.transcribed_answer || ""
       );
 
-      // Update next question
-     if (data.next_question) {
+      // ----------------------------------------------------
+      // Next Question
+      // ----------------------------------------------------
+
+      if (data.next_question) {
         const nextQuestion =
-         data.next_question.question || "";
+          data.next_question.question || "";
 
         setQuestion(nextQuestion);
 
+        setQuestionNumber(
+          (previous) => previous + 1
+        );
+
+        // EDITH speaks next question
         speakQuestion(nextQuestion);
       }
-      setQuestionNumber(
-        (previous) => previous + 1
-      );
-
     } catch (err) {
       console.error(err);
       setError(err.message);
@@ -244,10 +298,19 @@ const speakQuestion = (text) => {
     }
   };
 
+  // --------------------------------------------------------
+  // UI
+  // --------------------------------------------------------
+
   return (
     <div className="app">
 
+      {/* -------------------------------------------------- */}
+      {/* Header */}
+      {/* -------------------------------------------------- */}
+
       <header className="header">
+
         <div>
           <h1>EDITH</h1>
           <p>AI Interview & Placement Coach</p>
@@ -255,15 +318,23 @@ const speakQuestion = (text) => {
 
         <div className="status">
           <span className="status-dot"></span>
+
           {interviewStarted
             ? "Interview Active"
             : backendStatus}
         </div>
+
       </header>
+
+      {/* -------------------------------------------------- */}
+      {/* Main */}
+      {/* -------------------------------------------------- */}
 
       <main className="dashboard">
 
+        {/* Welcome */}
         <section className="welcome">
+
           <h2>
             {interviewStarted
               ? "Your Interview Has Started"
@@ -275,63 +346,134 @@ const speakQuestion = (text) => {
               ? "EDITH is ready to analyze your interview."
               : "Your adaptive AI-powered interview preparation assistant."}
           </p>
+
         </section>
 
+        {/* ------------------------------------------------ */}
+        {/* Preparation Cards */}
+        {/* ------------------------------------------------ */}
+
         {!interviewStarted && (
+
           <section className="cards">
 
             <div className="card">
+
               <h3>📄 Resume</h3>
+
               <p>
-                Upload your resume to create a personalized interview.
+                Upload your resume to create a
+                personalized interview.
               </p>
-              <button>Upload Resume</button>
+
+              <button>
+                Upload Resume
+              </button>
+
             </div>
 
             <div className="card">
+
               <h3>💼 Job Role</h3>
-              <p>Select the role you want to prepare for.</p>
 
-              <select>
-                <option>Select Job Role</option>
-                <option>Software Developer</option>
-                <option>Python Developer</option>
-                <option>Java Developer</option>
-                <option>AI/ML Engineer</option>
-                <option>Data Scientist</option>
-              </select>
-            </div>
-
-            <div className="card">
-              <h3>🎯 Interview Type</h3>
               <p>
-                Choose the type of interview you want to practice.
+                Select the role you want to prepare for.
               </p>
 
               <select>
-                <option>Select Interview Type</option>
-                <option>Technical</option>
-                <option>HR</option>
-                <option>Technical + HR</option>
-                <option>AI/ML</option>
+
+                <option>
+                  Select Job Role
+                </option>
+
+                <option>
+                  Software Developer
+                </option>
+
+                <option>
+                  Python Developer
+                </option>
+
+                <option>
+                  Java Developer
+                </option>
+
+                <option>
+                  AI/ML Engineer
+                </option>
+
+                <option>
+                  Data Scientist
+                </option>
+
               </select>
+
+            </div>
+
+            <div className="card">
+
+              <h3>🎯 Interview Type</h3>
+
+              <p>
+                Choose the type of interview
+                you want to practice.
+              </p>
+
+              <select>
+
+                <option>
+                  Select Interview Type
+                </option>
+
+                <option>
+                  Technical
+                </option>
+
+                <option>
+                  HR
+                </option>
+
+                <option>
+                  Technical + HR
+                </option>
+
+                <option>
+                  AI/ML
+                </option>
+
+              </select>
+
             </div>
 
           </section>
         )}
 
+        {/* ------------------------------------------------ */}
+        {/* Camera + Interview */}
+        {/* ------------------------------------------------ */}
+
         <section className="camera-section">
 
+          {/* Camera */}
           <div className="camera-box">
 
             {!interviewStarted && (
+
               <>
-                <div className="camera-icon">📷</div>
-                <h3>Camera Preview</h3>
+                <div className="camera-icon">
+                  📷
+                </div>
+
+                <h3>
+                  Camera Preview
+                </h3>
+
                 <p>
-                  Your camera will appear here during the interview.
+                  Your camera will appear here
+                  during the interview.
                 </p>
               </>
+
             )}
 
             <video
@@ -348,70 +490,178 @@ const speakQuestion = (text) => {
 
           </div>
 
+          {/* Interview Panel */}
           <div className="interview-panel">
 
             <h2>
+
               {interviewStarted
                 ? "Interview in Progress"
                 : "Ready for your interview?"}
+
             </h2>
 
-            {interviewStarted && (
-              <>
-                <div className="question-box">
-                  <p>
-                    Question {questionNumber}
-                  </p>
+            {/* -------------------------------------------- */}
+            {/* Active Interview */}
+            {/* -------------------------------------------- */}
 
-                  <h3>{question}</h3>
+            {interviewStarted && (
+
+              <>
+
+                {/* Question */}
+                <div className="question-box">
+
+                  <div className="question-header">
+
+                    <span>
+                      Question {questionNumber}
+                    </span>
+
+                    {speaking && (
+
+                      <span className="speaking-label">
+                        🔊 EDITH speaking
+                      </span>
+
+                    )}
+
+                  </div>
+
+                  {/* Progress */}
+                  <div className="question-progress">
+
+                    <div
+                      className="question-progress-bar"
+                      style={{
+                        width: `${Math.min(
+                          questionNumber * 10,
+                          100
+                        )}%`,
+                      }}
+                    ></div>
+
+                  </div>
+
+                  <h3>
+                    {question}
+                  </h3>
+
                 </div>
 
-                <div className="voice-controls">
+                {/* Session Information */}
+                <div className="session-info">
 
-                  {!recording && !processing && (
-                    <button
-                      className="start-button"
-                      onClick={startRecording}
-                    >
-                      🎤 Start Answer
-                    </button>
-                  )}
+                  <span>
+                    🟢 Session Active
+                  </span>
+
+                  <span>
+                    Session:{" "}
+                    {sessionId
+                      ? `${sessionId.slice(0, 8)}...`
+                      : ""}
+                  </span>
+
+                </div>
+
+                {/* Voice Status */}
+                <div className="voice-status">
+
                   {speaking && (
+
                     <div className="recording-status">
                       🔊 EDITH is speaking...
                     </div>
+
                   )}
+
                   {recording && (
+
+                    <div className="recording-status">
+                      🔴 Listening to your answer...
+                    </div>
+
+                  )}
+
+                  {processing && (
+
+                    <div className="recording-status">
+                      🧠 Analyzing your answer...
+                    </div>
+
+                  )}
+
+                </div>
+
+                {/* ---------------------------------------- */}
+                {/* Voice Controls */}
+                {/* ---------------------------------------- */}
+
+                <div className="voice-controls">
+
+                  {!recording &&
+                    !processing &&
+                    !speaking && (
+
+                      <button
+                        className="start-button"
+                        onClick={startRecording}
+                      >
+                        🎤 Start Answer
+                      </button>
+
+                    )}
+
+                  {recording && (
+
                     <button
                       className="start-button"
                       onClick={stopRecording}
                     >
                       ⏹ Stop Recording
                     </button>
-                  )}
 
-                  {processing && (
-                    <div className="recording-status">
-                      🧠 EDITH is analyzing your answer...
-                    </div>
                   )}
 
                 </div>
 
+                {/* ---------------------------------------- */}
+                {/* Transcription */}
+                {/* ---------------------------------------- */}
+
                 {transcribedAnswer && (
+
                   <div className="answer-box">
-                    <h3>Your Answer</h3>
-                    <p>{transcribedAnswer}</p>
+
+                    <h3>
+                      Your Answer
+                    </h3>
+
+                    <p>
+                      {transcribedAnswer}
+                    </p>
+
                   </div>
+
                 )}
+
               </>
+
             )}
 
+            {/* -------------------------------------------- */}
+            {/* Before Interview */}
+            {/* -------------------------------------------- */}
+
             {!interviewStarted && (
+
               <>
+
                 <p>
-                  EDITH will analyze your answers, communication,
-                  technical knowledge and identify areas for improvement.
+                  EDITH will analyze your answers,
+                  communication, technical knowledge
+                  and identify areas for improvement.
                 </p>
 
                 <button
@@ -420,13 +670,18 @@ const speakQuestion = (text) => {
                 >
                   🎤 Start Interview
                 </button>
+
               </>
+
             )}
 
+            {/* Error */}
             {error && (
+
               <p className="error-message">
                 {error}
               </p>
+
             )}
 
           </div>
@@ -435,8 +690,16 @@ const speakQuestion = (text) => {
 
       </main>
 
+      {/* -------------------------------------------------- */}
+      {/* Footer */}
+      {/* -------------------------------------------------- */}
+
       <footer>
-        <p>EDITH • Adaptive AI Interview System</p>
+
+        <p>
+          EDITH • Adaptive AI Interview System
+        </p>
+
       </footer>
 
     </div>

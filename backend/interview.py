@@ -102,6 +102,7 @@ def submit_answer(data: dict):
         question,
         answer,
         analysis
+        
     )
 
     # --------------------------------------------------------
@@ -111,7 +112,8 @@ def submit_answer(data: dict):
     next_question = generate_next_question(
         question,
         answer,
-        analysis
+        analysis,
+        session["questions"]
     )
 
     # --------------------------------------------------------
@@ -286,7 +288,8 @@ async def voice_answer(
     next_question = generate_next_question(
         question,
         answer,
-        analysis
+        analysis,
+        session["questions"]
     )
 
     # --------------------------------------------------------
