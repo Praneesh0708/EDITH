@@ -2,9 +2,14 @@ from fastapi import APIRouter, UploadFile, File ,Form
 
 import cv2
 import numpy as np
+from requests import session
+from backend.services.dynamic_question_generator import (
+    generate_dynamic_question
+)
 
 from backend.services.answer_analyzer import analyze_answer
 from backend.services.question_engine import generate_next_question
+from backend.services.context_analyzer import extract_answer_context
 from backend.services.session_manager import (
     create_session,
     get_session,
@@ -92,6 +97,11 @@ def submit_answer(data: dict):
         question,
         answer
     )
+    # --------------------------------------------------------
+# Extract Answer Context
+# --------------------------------------------------------
+
+    context = extract_answer_context(answer)
 
     # --------------------------------------------------------
     # Store Interaction
@@ -104,16 +114,23 @@ def submit_answer(data: dict):
         analysis
         
     )
+        # --------------------------------------------------------
+    # Store Context
+    # --------------------------------------------------------
+
+    if "contexts" not in session:
+        session["contexts"] = []
+
+    session["contexts"].append(context)
 
     # --------------------------------------------------------
     # Generate Next Question
     # --------------------------------------------------------
-
-    next_question = generate_next_question(
-        question,
-        answer,
-        analysis,
-        session["questions"]
+    next_question = generate_dynamic_question(
+        previous_question=question,
+        answer=answer,
+        context=context,
+        analysis=analysis
     )
 
     # --------------------------------------------------------
@@ -132,7 +149,8 @@ def submit_answer(data: dict):
         "question": question,
         "answer": answer,
         "analysis": analysis,
-        "next_question": next_question
+        "next_question": next_question,
+        "context": context
     }
 
 
@@ -269,7 +287,14 @@ async def voice_answer(
         question,
         answer
     )
+    # --------------------------------------------------------
+    # Extract Answer Context
+    # --------------------------------------------------------
 
+    context = extract_answer_context(answer)
+    if "contexts" not in session:
+        session["contexts"] = []
+    session["contexts"].append(context)
     # --------------------------------------------------------
     # Store Interaction
     # --------------------------------------------------------
@@ -285,11 +310,11 @@ async def voice_answer(
     # Generate Next Question
     # --------------------------------------------------------
 
-    next_question = generate_next_question(
-        question,
-        answer,
-        analysis,
-        session["questions"]
+    next_question = generate_dynamic_question(
+        previous_question=question,
+        answer=answer,
+        context=context,
+        analysis=analysis
     )
 
     # --------------------------------------------------------
@@ -307,6 +332,7 @@ async def voice_answer(
         "question": question,
         "transcribed_answer": answer,
         "analysis": analysis,
+        "context": context,
         "next_question": next_question
     }
 
