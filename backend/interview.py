@@ -1,27 +1,47 @@
-from fastapi import APIRouter, UploadFile, File ,Form
+from fastapi import APIRouter, UploadFile, File, Form
 
 import cv2
 import numpy as np
-from requests import session
-from backend.services.dynamic_question_generator import (
-    generate_dynamic_question
-)
 
 from backend.services.answer_analyzer import analyze_answer
-from backend.services.question_engine import generate_next_question
-from backend.services.context_analyzer import extract_answer_context
+
 from backend.services.session_manager import (
     create_session,
     get_session,
     add_interaction,
     add_face_event,
-    end_session
+    end_session,
+    get_conversation_memory
 )
-from backend.services.interview_report import generate_interview_report
-from backend.services.voice_analyzer import analyze_voice
-from backend.services.speech_service import transcribe_audio
-from backend.services.face_analyzer import analyze_face
 
+from backend.services.interview_report import (
+    generate_interview_report
+)
+
+from backend.services.voice_analyzer import (
+    analyze_voice
+)
+
+from backend.services.speech_service import (
+    transcribe_audio
+)
+
+from backend.services.face_analyzer import (
+    analyze_face
+)
+
+from backend.services.context_analyzer import (
+    extract_answer_context
+)
+
+from backend.services.gemini_question_generator import (
+    generate_gemini_question
+)
+
+
+# ============================================================
+# INTERVIEW ROUTER
+# ============================================================
 
 router = APIRouter(
     prefix="/interview",
@@ -30,7 +50,7 @@ router = APIRouter(
 
 
 # ============================================================
-# Interview Home
+# INTERVIEW HOME
 # ============================================================
 
 @router.get("/")
@@ -43,7 +63,7 @@ def interview_home():
 
 
 # ============================================================
-# Start Interview
+# START INTERVIEW
 # ============================================================
 
 @router.post("/start")
@@ -53,7 +73,9 @@ def start_interview():
 
     first_question = "Tell me about yourself."
 
-    session["questions"].append(first_question)
+    session["questions"].append(
+        first_question
+    )
 
     return {
         "status": "success",
@@ -65,29 +87,55 @@ def start_interview():
 
 
 # ============================================================
-# Submit Text Answer
+# SUBMIT TEXT ANSWER
 # ============================================================
 
 @router.post("/answer")
 def submit_answer(data: dict):
 
     session_id = data.get("session_id")
-    answer = data.get("answer", "")
 
-    session = get_session(session_id)
+    answer = data.get(
+        "answer",
+        ""
+    )
+
+    # --------------------------------------------------------
+    # Get Session
+    # --------------------------------------------------------
+
+    session = get_session(
+        session_id
+    )
 
     if not session:
+
         return {
             "status": "error",
             "message": "Invalid session ID"
         }
 
-    question_number = session["question_number"]
+    # --------------------------------------------------------
+    # Get Current Question
+    # --------------------------------------------------------
 
-    if question_number > len(session["questions"]):
-        question = session["questions"][-1]
+    question_number = session[
+        "question_number"
+    ]
+
+    if question_number > len(
+        session["questions"]
+    ):
+
+        question = session[
+            "questions"
+        ][-1]
+
     else:
-        question = session["questions"][question_number - 1]
+
+        question = session[
+            "questions"
+        ][question_number - 1]
 
     # --------------------------------------------------------
     # Analyze Answer
@@ -97,11 +145,14 @@ def submit_answer(data: dict):
         question,
         answer
     )
-    # --------------------------------------------------------
-# Extract Answer Context
-# --------------------------------------------------------
 
-    context = extract_answer_context(answer)
+    # --------------------------------------------------------
+    # Extract Context
+    # --------------------------------------------------------
+
+    context = extract_answer_context(
+        answer
+    )
 
     # --------------------------------------------------------
     # Store Interaction
@@ -112,58 +163,90 @@ def submit_answer(data: dict):
         question,
         answer,
         analysis
-        
     )
-        # --------------------------------------------------------
-    # Store Context
-    # --------------------------------------------------------
-
-    if "contexts" not in session:
-        session["contexts"] = []
-
-    session["contexts"].append(context)
 
     # --------------------------------------------------------
-    # Generate Next Question
+    # Get Conversation Memory
     # --------------------------------------------------------
-    next_question = generate_dynamic_question(
+
+    conversation_memory = (
+        get_conversation_memory(
+            session_id
+        )
+    )
+
+    # --------------------------------------------------------
+    # Generate Personalized Question
+    # --------------------------------------------------------
+
+    next_question = generate_gemini_question(
+
         previous_question=question,
+
         answer=answer,
+
         context=context,
-        analysis=analysis
+
+        analysis=analysis,
+
+        conversation_memory=conversation_memory
     )
 
     # --------------------------------------------------------
-    # Store Next Question
+    # Store Generated Question
     # --------------------------------------------------------
 
-    session["questions"].append(
-        next_question["question"]
-    )
+    if next_question.get("question"):
+
+        session[
+            "questions"
+        ].append(
+            next_question["question"]
+        )
+
+    # --------------------------------------------------------
+    # Response
+    # --------------------------------------------------------
 
     return {
+
         "status": "success",
+
         "message": "Answer analyzed",
+
         "session_id": session_id,
+
         "question_number": question_number,
+
         "question": question,
+
         "answer": answer,
+
         "analysis": analysis,
-        "next_question": next_question,
-        "context": context
+
+        "context": context,
+
+        "conversation_memory": conversation_memory,
+
+        "next_question": next_question
     }
 
 
 # ============================================================
-# Get Interview Session
+# GET INTERVIEW SESSION
 # ============================================================
 
 @router.get("/session/{session_id}")
-def get_interview_session(session_id: str):
+def get_interview_session(
+    session_id: str
+):
 
-    session = get_session(session_id)
+    session = get_session(
+        session_id
+    )
 
     if not session:
+
         return {
             "status": "error",
             "message": "Session not found"
@@ -176,32 +259,43 @@ def get_interview_session(session_id: str):
 
 
 # ============================================================
-# End Interview
+# END INTERVIEW
 # ============================================================
 
 @router.post("/end/{session_id}")
-def finish_interview(session_id: str):
+def finish_interview(
+    session_id: str
+):
 
-    session = end_session(session_id)
+    session = end_session(
+        session_id
+    )
 
     if not session:
+
         return {
             "status": "error",
             "message": "Session not found"
         }
 
-    report = generate_interview_report(session)
+    report = generate_interview_report(
+        session
+    )
 
     return {
+
         "status": "success",
+
         "message": "Interview completed",
+
         "session": session,
+
         "report": report
     }
 
 
 # ============================================================
-# Voice Analysis
+# VOICE ANALYSIS
 # ============================================================
 
 @router.post("/voice")
@@ -214,28 +308,37 @@ def analyze_voice_answer(
     )
 
     return {
+
         "status": "success",
+
         "message": "Voice analyzed",
+
         "voice_analysis": result
     }
 
 
 # ============================================================
-# Voice Answer + Whisper Transcription
+# VOICE ANSWER + WHISPER TRANSCRIPTION
 # ============================================================
 
 @router.post("/voice-answer")
 async def voice_answer(
+
     session_id: str = Form(...),
+
     audio_file: UploadFile = File(...)
 ):
+
     # --------------------------------------------------------
     # Get Session
     # --------------------------------------------------------
 
-    session = get_session(session_id)
+    session = get_session(
+        session_id
+    )
 
     if not session:
+
         return {
             "status": "error",
             "message": "Invalid session ID"
@@ -245,25 +348,47 @@ async def voice_answer(
     # Save Uploaded Audio
     # --------------------------------------------------------
 
-    filename = f"backend/test_voice_{session_id}.webm"
+    filename = (
+        f"backend/test_voice_"
+        f"{session_id}.webm"
+    )
 
-    with open(filename, "wb") as f:
-        f.write(await audio_file.read())
+    with open(
+        filename,
+        "wb"
+    ) as f:
+
+        f.write(
+            await audio_file.read()
+        )
 
     # --------------------------------------------------------
     # Whisper Transcription
     # --------------------------------------------------------
 
-    answer = transcribe_audio(filename)
+    answer = transcribe_audio(
+        filename
+    )
 
     # --------------------------------------------------------
-    # Convert Whisper Result to Text
+    # Convert Whisper Result To Text
     # --------------------------------------------------------
 
-    if isinstance(answer, dict):
-        answer = answer.get("text", "")
+    if isinstance(
+        answer,
+        dict
+    ):
 
-    if not isinstance(answer, str):
+        answer = answer.get(
+            "text",
+            ""
+        )
+
+    if not isinstance(
+        answer,
+        str
+    ):
+
         answer = str(answer)
 
     answer = answer.strip()
@@ -272,12 +397,23 @@ async def voice_answer(
     # Get Current Question
     # --------------------------------------------------------
 
-    question_number = session["question_number"]
+    question_number = session[
+        "question_number"
+    ]
 
-    if question_number > len(session["questions"]):
-        question = session["questions"][-1]
+    if question_number > len(
+        session["questions"]
+    ):
+
+        question = session[
+            "questions"
+        ][-1]
+
     else:
-        question = session["questions"][question_number - 1]
+
+        question = session[
+            "questions"
+        ][question_number - 1]
 
     # --------------------------------------------------------
     # Analyze Answer
@@ -287,14 +423,15 @@ async def voice_answer(
         question,
         answer
     )
+
     # --------------------------------------------------------
-    # Extract Answer Context
+    # Extract Context
     # --------------------------------------------------------
 
-    context = extract_answer_context(answer)
-    if "contexts" not in session:
-        session["contexts"] = []
-    session["contexts"].append(context)
+    context = extract_answer_context(
+        answer
+    )
+
     # --------------------------------------------------------
     # Store Interaction
     # --------------------------------------------------------
@@ -307,43 +444,79 @@ async def voice_answer(
     )
 
     # --------------------------------------------------------
-    # Generate Next Question
+    # Get Conversation Memory
     # --------------------------------------------------------
 
-    next_question = generate_dynamic_question(
+    conversation_memory = (
+        get_conversation_memory(
+            session_id
+        )
+    )
+
+    # --------------------------------------------------------
+    # Generate Gemini Question
+    # --------------------------------------------------------
+
+    next_question = generate_gemini_question(
+
         previous_question=question,
+
         answer=answer,
+
         context=context,
-        analysis=analysis
+
+        analysis=analysis,
+
+        conversation_memory=conversation_memory
     )
 
     # --------------------------------------------------------
     # Store Next Question
     # --------------------------------------------------------
 
-    session["questions"].append(
-        next_question["question"]
-    )
+    if next_question.get("question"):
+
+        session[
+            "questions"
+        ].append(
+            next_question["question"]
+        )
+
+    # --------------------------------------------------------
+    # Return Result
+    # --------------------------------------------------------
 
     return {
+
         "status": "success",
+
         "message": "Voice answer processed",
+
         "session_id": session_id,
+
         "question": question,
+
         "transcribed_answer": answer,
+
         "analysis": analysis,
+
         "context": context,
+
+        "conversation_memory": conversation_memory,
+
         "next_question": next_question
     }
 
 
 # ============================================================
-# Face Analysis
+# FACE ANALYSIS
 # ============================================================
 
 @router.post("/face")
 async def analyze_face_frame(
+
     session_id: str,
+
     image_file: UploadFile = File(...)
 ):
 
@@ -351,9 +524,12 @@ async def analyze_face_frame(
     # Get Interview Session
     # --------------------------------------------------------
 
-    session = get_session(session_id)
+    session = get_session(
+        session_id
+    )
 
     if not session:
+
         return {
             "status": "error",
             "message": "Invalid session ID"
@@ -366,7 +542,7 @@ async def analyze_face_frame(
     image_bytes = await image_file.read()
 
     # --------------------------------------------------------
-    # Convert Image Bytes to NumPy Array
+    # Convert Image Bytes To NumPy Array
     # --------------------------------------------------------
 
     image_array = np.frombuffer(
@@ -384,6 +560,7 @@ async def analyze_face_frame(
     )
 
     if image is None:
+
         return {
             "status": "error",
             "message": "Invalid image file"
@@ -393,16 +570,27 @@ async def analyze_face_frame(
     # Analyze Face
     # --------------------------------------------------------
 
-    result = analyze_face(image)
+    result = analyze_face(
+        image
+    )
 
     # --------------------------------------------------------
-    # Store Face Event in Session
+    # Store Face Event
     # --------------------------------------------------------
 
     add_face_event(
+
         session_id,
-        result.get("face_detected", False),
-        result.get("face_count", 0)
+
+        result.get(
+            "face_detected",
+            False
+        ),
+
+        result.get(
+            "face_count",
+            0
+        )
     )
 
     # --------------------------------------------------------
@@ -410,9 +598,14 @@ async def analyze_face_frame(
     # --------------------------------------------------------
 
     return {
+
         "status": "success",
-        "message": "Face analyzed and stored",
+
+        "message": (
+            "Face analyzed and stored"
+        ),
+
         "session_id": session_id,
+
         "face_analysis": result
     }
-
