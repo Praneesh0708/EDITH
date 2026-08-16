@@ -15,7 +15,8 @@ from backend.services.session_manager import (
 )
 
 from backend.services.interview_report import (
-    generate_interview_report
+    generate_interview_report,
+    format_interview_report
 )
 
 from backend.services.voice_analyzer import (
@@ -36,6 +37,10 @@ from backend.services.context_analyzer import (
 
 from backend.services.gemini_question_generator import (
     generate_gemini_question
+)
+
+from backend.services.human_answer_evaluator import (
+    evaluate_answer_human_like
 )
 
 
@@ -155,6 +160,17 @@ def submit_answer(data: dict):
     )
 
     # --------------------------------------------------------
+    # HUMAN-LIKE GEMINI EVALUATION
+    # --------------------------------------------------------
+
+    human_evaluation = evaluate_answer_human_like(
+        question=question,
+        answer=answer,
+        context=context,
+        analysis=analysis
+    )
+
+    # --------------------------------------------------------
     # Store Interaction
     # --------------------------------------------------------
 
@@ -224,6 +240,8 @@ def submit_answer(data: dict):
 
         "analysis": analysis,
 
+        "human_evaluation": human_evaluation,
+
         "context": context,
 
         "conversation_memory": conversation_memory,
@@ -281,7 +299,9 @@ def finish_interview(
     report = generate_interview_report(
         session
     )
-
+    formatted_report = format_interview_report(
+        report
+    )
     return {
 
         "status": "success",
@@ -290,7 +310,9 @@ def finish_interview(
 
         "session": session,
 
-        "report": report
+        "report": report,
+
+        "formatted_report": formatted_report
     }
 
 
@@ -433,6 +455,17 @@ async def voice_answer(
     )
 
     # --------------------------------------------------------
+    # HUMAN-LIKE GEMINI EVALUATION
+    # --------------------------------------------------------
+
+    human_evaluation = evaluate_answer_human_like(
+        question=question,
+        answer=answer,
+        context=context,
+        analysis=analysis
+    )
+
+    # --------------------------------------------------------
     # Store Interaction
     # --------------------------------------------------------
 
@@ -440,7 +473,8 @@ async def voice_answer(
         session_id,
         question,
         answer,
-        analysis
+        analysis,
+        human_evaluation
     )
 
     # --------------------------------------------------------
@@ -499,6 +533,8 @@ async def voice_answer(
         "transcribed_answer": answer,
 
         "analysis": analysis,
+
+        "human_evaluation": human_evaluation,
 
         "context": context,
 

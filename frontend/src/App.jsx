@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
@@ -7,22 +8,32 @@ function App() {
   const audioChunksRef = useRef([]);
 
   const [interviewStarted, setInterviewStarted] = useState(false);
+  const [interviewEnded, setInterviewEnded] = useState(false);
+
   const [error, setError] = useState("");
-  const [backendStatus, setBackendStatus] = useState("Checking...");
+  const [backendStatus, setBackendStatus] =
+    useState("Checking...");
 
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState("");
-  const [questionNumber, setQuestionNumber] = useState(0);
+  const [questionNumber, setQuestionNumber] =
+    useState(0);
 
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [speaking, setSpeaking] = useState(false);
 
-  const [transcribedAnswer, setTranscribedAnswer] = useState("");
+  const [transcribedAnswer, setTranscribedAnswer] =
+    useState("");
 
-  // --------------------------------------------------------
-  // Check Backend
-  // --------------------------------------------------------
+  const [report, setReport] = useState(null);
+
+  const [showEndConfirmation, setShowEndConfirmation] =
+    useState(false);
+
+  // =========================================================
+  // CHECK BACKEND
+  // =========================================================
 
   useEffect(() => {
     fetch("http://127.0.0.1:8000/api/status")
@@ -39,16 +50,17 @@ function App() {
       });
   }, []);
 
-  // --------------------------------------------------------
-  // EDITH Text-to-Speech
-  // --------------------------------------------------------
+  // =========================================================
+  // TEXT TO SPEECH
+  // =========================================================
 
   const speakQuestion = (text) => {
     if (!text) return;
 
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance =
+      new SpeechSynthesisUtterance(text);
 
     utterance.rate = 0.95;
     utterance.pitch = 1;
@@ -69,23 +81,24 @@ function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // --------------------------------------------------------
-  // Start Interview
-  // --------------------------------------------------------
+  // =========================================================
+  // START INTERVIEW
+  // =========================================================
 
   const startInterview = async () => {
     try {
       setError("");
 
-      // Camera + Microphone
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      const stream =
+        await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
 
-      videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
 
-      // Start backend interview session
       const response = await fetch(
         "http://127.0.0.1:8000/interview/start",
         {
@@ -97,26 +110,38 @@ function App() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to start interview");
+        throw new Error(
+          "Failed to start interview"
+        );
       }
 
       const data = await response.json();
 
+      console.log(
+        "START INTERVIEW RESPONSE:",
+        data
+      );
+
       if (data.status !== "success") {
         throw new Error(
-          data.message || "Interview could not be started"
+          data.message ||
+            "Interview could not be started"
         );
       }
 
-      // Store session information
       setSessionId(data.session_id);
-      setQuestion(data.question);
-      setQuestionNumber(data.question_number);
+      setQuestion(data.question || "");
+      setQuestionNumber(
+        data.question_number || 1
+      );
 
       setInterviewStarted(true);
+      setInterviewEnded(false);
+      setReport(null);
+      setTranscribedAnswer("");
 
-      // EDITH speaks first question
       speakQuestion(data.question);
+
     } catch (err) {
       console.error(err);
 
@@ -127,26 +152,28 @@ function App() {
     }
   };
 
-  // --------------------------------------------------------
-  // Start Voice Recording
-  // --------------------------------------------------------
+  // =========================================================
+  // START RECORDING
+  // =========================================================
 
   const startRecording = () => {
-    if (speaking) {
+    if (speaking || processing) {
       return;
     }
 
     try {
-      const stream = videoRef.current?.srcObject;
+      const stream =
+        videoRef.current?.srcObject;
 
       if (!stream) {
-        setError("Camera and microphone are not active.");
+        setError(
+          "Camera and microphone are not active."
+        );
         return;
       }
 
       audioChunksRef.current = [];
 
-      // Use only microphone audio
       const audioStream = new MediaStream(
         stream.getAudioTracks()
       );
@@ -158,24 +185,36 @@ function App() {
           "audio/webm;codecs=opus"
         )
       ) {
-        recorder = new MediaRecorder(audioStream, {
-          mimeType: "audio/webm;codecs=opus",
-        });
+        recorder = new MediaRecorder(
+          audioStream,
+          {
+            mimeType:
+              "audio/webm;codecs=opus",
+          }
+        );
       } else if (
-        MediaRecorder.isTypeSupported("audio/webm")
+        MediaRecorder.isTypeSupported(
+          "audio/webm"
+        )
       ) {
-        recorder = new MediaRecorder(audioStream, {
-          mimeType: "audio/webm",
-        });
+        recorder = new MediaRecorder(
+          audioStream,
+          {
+            mimeType: "audio/webm",
+          }
+        );
       } else {
-        recorder = new MediaRecorder(audioStream);
+        recorder =
+          new MediaRecorder(audioStream);
       }
 
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+          audioChunksRef.current.push(
+            event.data
+          );
         }
       };
 
@@ -187,9 +226,10 @@ function App() {
           }
         );
 
-        console.log("Audio blob:", audioBlob);
-        console.log("Audio size:", audioBlob.size);
-        console.log("Audio type:", audioBlob.type);
+        console.log(
+          "Audio size:",
+          audioBlob.size
+        );
 
         await sendVoiceAnswer(audioBlob);
       };
@@ -199,38 +239,48 @@ function App() {
       setRecording(true);
       setError("");
       setTranscribedAnswer("");
+
     } catch (err) {
       console.error(err);
-      setError("Unable to start voice recording.");
+
+      setError(
+        "Unable to start voice recording."
+      );
     }
   };
 
-  // --------------------------------------------------------
-  // Stop Voice Recording
-  // --------------------------------------------------------
+  // =========================================================
+  // STOP RECORDING
+  // =========================================================
 
   const stopRecording = () => {
     if (
       mediaRecorderRef.current &&
-      mediaRecorderRef.current.state !== "inactive"
+      mediaRecorderRef.current.state !==
+        "inactive"
     ) {
       mediaRecorderRef.current.stop();
       setRecording(false);
     }
   };
 
-  // --------------------------------------------------------
-  // Send Voice Answer
-  // --------------------------------------------------------
+  // =========================================================
+  // SEND VOICE ANSWER
+  // =========================================================
 
-  const sendVoiceAnswer = async (audioBlob) => {
+  const sendVoiceAnswer = async (
+    audioBlob
+  ) => {
     try {
       setProcessing(true);
       setError("");
 
       const formData = new FormData();
 
-      formData.append("session_id", sessionId);
+      formData.append(
+        "session_id",
+        sessionId
+      );
 
       formData.append(
         "audio_file",
@@ -247,7 +297,8 @@ function App() {
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText =
+          await response.text();
 
         console.error(
           "Voice answer error:",
@@ -259,7 +310,13 @@ function App() {
         );
       }
 
-      const data = await response.json();
+      const data =
+        await response.json();
+
+      console.log(
+        "VOICE ANSWER RESPONSE:",
+        data
+      );
 
       if (data.status !== "success") {
         throw new Error(
@@ -268,71 +325,301 @@ function App() {
         );
       }
 
-      // Display transcription
       setTranscribedAnswer(
         data.transcribed_answer || ""
       );
 
-      // ----------------------------------------------------
-      // Next Question
-      // ----------------------------------------------------
-
+      // Get next question
       if (data.next_question) {
         const nextQuestion =
-          data.next_question.question || "";
+          data.next_question.question ||
+          data.next_question ||
+          "";
 
         setQuestion(nextQuestion);
 
         setQuestionNumber(
-          (previous) => previous + 1
+          (previous) =>
+            previous + 1
         );
 
-        // EDITH speaks next question
         speakQuestion(nextQuestion);
       }
+
     } catch (err) {
       console.error(err);
-      setError(err.message);
+
+      setError(
+        err.message ||
+          "Unable to process answer."
+      );
+
     } finally {
       setProcessing(false);
     }
   };
 
-  // --------------------------------------------------------
-  // UI
-  // --------------------------------------------------------
+  // =========================================================
+  // OPEN END INTERVIEW CONFIRMATION
+  // =========================================================
+
+  const endInterview = () => {
+    console.log(
+      "END INTERVIEW BUTTON CLICKED"
+    );
+
+    if (!sessionId) {
+      setError(
+        "There is no active interview session."
+      );
+      return;
+    }
+
+    if (recording) {
+      setError(
+        "Please stop recording before ending the interview."
+      );
+      return;
+    }
+
+    setShowEndConfirmation(true);
+  };
+
+  // =========================================================
+  // ACTUALLY END INTERVIEW
+  // =========================================================
+
+  const confirmEndInterview =
+    async () => {
+      console.log(
+        "CONFIRM END INTERVIEW"
+      );
+
+      setShowEndConfirmation(false);
+
+      try {
+        setProcessing(true);
+        setError("");
+
+        // Stop EDITH speech
+        window.speechSynthesis.cancel();
+        setSpeaking(false);
+
+        const response =
+          await fetch(
+            `http://127.0.0.1:8000/interview/end/${sessionId}`,
+            {
+              method: "POST",
+            }
+          );
+
+        const data =
+          await response.json();
+
+        console.log(
+          "END INTERVIEW RESPONSE:",
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data.detail ||
+              "Failed to end interview."
+          );
+        }
+
+        if (
+          data.status !== "success"
+        ) {
+          throw new Error(
+            data.message ||
+              "Interview could not be completed."
+          );
+        }
+
+        // Save report
+        setReport(data.report);
+
+        // Stop camera and microphone
+        const stream =
+          videoRef.current?.srcObject;
+
+        if (stream) {
+          stream
+            .getTracks()
+            .forEach((track) => {
+              track.stop();
+            });
+
+          videoRef.current.srcObject =
+            null;
+        }
+
+        setInterviewStarted(false);
+        setInterviewEnded(true);
+
+      } catch (err) {
+        console.error(err);
+
+        setError(
+          err.message ||
+            "Unable to generate interview report."
+        );
+
+      } finally {
+        setProcessing(false);
+      }
+    };
+
+  // =========================================================
+  // START NEW INTERVIEW
+  // =========================================================
+
+  const startNewInterview = () => {
+    setSessionId("");
+    setQuestion("");
+    setQuestionNumber(0);
+
+    setRecording(false);
+    setProcessing(false);
+    setSpeaking(false);
+
+    setTranscribedAnswer("");
+
+    setInterviewStarted(false);
+    setInterviewEnded(false);
+
+    setReport(null);
+    setError("");
+
+    setShowEndConfirmation(false);
+  };
+
+  // =========================================================
+  // REPORT SCREEN
+  // =========================================================
+
+  if (
+    interviewEnded &&
+    report
+  ) {
+    return (
+      <div className="app">
+
+        <header className="header">
+
+          <div>
+            <h1>EDITH</h1>
+
+            <p>
+              AI Interview & Placement Coach
+            </p>
+          </div>
+
+          <div className="status">
+
+            <span className="status-dot"></span>
+
+            Interview Completed
+
+          </div>
+
+        </header>
+
+        <main className="dashboard">
+
+          <section className="welcome">
+
+            <h2>
+              Interview Completed
+            </h2>
+
+            <p>
+              EDITH has analyzed your
+              interview performance.
+            </p>
+
+          </section>
+
+          <div className="report-container">
+
+            <pre className="report-output">
+              {JSON.stringify(
+                report,
+                null,
+                2
+              )}
+            </pre>
+
+          </div>
+
+          <div className="new-interview-container">
+
+            <button
+              className="start-button"
+              onClick={
+                startNewInterview
+              }
+            >
+              🎤 Start New Interview
+            </button>
+
+          </div>
+
+        </main>
+
+        <footer>
+
+          <p>
+            EDITH • Adaptive AI Interview System
+          </p>
+
+        </footer>
+
+      </div>
+    );
+  }
+
+  // =========================================================
+  // MAIN UI
+  // =========================================================
 
   return (
     <div className="app">
 
-      {/* -------------------------------------------------- */}
-      {/* Header */}
-      {/* -------------------------------------------------- */}
+      {/* HEADER */}
 
       <header className="header">
 
         <div>
+
           <h1>EDITH</h1>
-          <p>AI Interview & Placement Coach</p>
+
+          <p>
+            AI Interview & Placement Coach
+          </p>
+
         </div>
 
         <div className="status">
+
           <span className="status-dot"></span>
 
           {interviewStarted
             ? "Interview Active"
             : backendStatus}
+
         </div>
 
       </header>
 
-      {/* -------------------------------------------------- */}
-      {/* Main */}
-      {/* -------------------------------------------------- */}
+
+      {/* MAIN */}
 
       <main className="dashboard">
 
-        {/* Welcome */}
+        {/* WELCOME */}
+
         <section className="welcome">
 
           <h2>
@@ -349,9 +636,8 @@ function App() {
 
         </section>
 
-        {/* ------------------------------------------------ */}
-        {/* Preparation Cards */}
-        {/* ------------------------------------------------ */}
+
+        {/* PREPARATION CARDS */}
 
         {!interviewStarted && (
 
@@ -359,11 +645,13 @@ function App() {
 
             <div className="card">
 
-              <h3>📄 Resume</h3>
+              <h3>
+                📄 Resume
+              </h3>
 
               <p>
-                Upload your resume to create a
-                personalized interview.
+                Upload your resume to create
+                a personalized interview.
               </p>
 
               <button>
@@ -372,12 +660,16 @@ function App() {
 
             </div>
 
+
             <div className="card">
 
-              <h3>💼 Job Role</h3>
+              <h3>
+                💼 Job Role
+              </h3>
 
               <p>
-                Select the role you want to prepare for.
+                Select the role you want
+                to prepare for.
               </p>
 
               <select>
@@ -410,13 +702,16 @@ function App() {
 
             </div>
 
+
             <div className="card">
 
-              <h3>🎯 Interview Type</h3>
+              <h3>
+                🎯 Interview Type
+              </h3>
 
               <p>
-                Choose the type of interview
-                you want to practice.
+                Choose the type of
+                interview you want to practice.
               </p>
 
               <select>
@@ -446,15 +741,16 @@ function App() {
             </div>
 
           </section>
+
         )}
 
-        {/* ------------------------------------------------ */}
-        {/* Camera + Interview */}
-        {/* ------------------------------------------------ */}
+
+        {/* CAMERA + INTERVIEW */}
 
         <section className="camera-section">
 
-          {/* Camera */}
+          {/* CAMERA */}
+
           <div className="camera-box">
 
             {!interviewStarted && (
@@ -469,8 +765,8 @@ function App() {
                 </h3>
 
                 <p>
-                  Your camera will appear here
-                  during the interview.
+                  Your camera will appear
+                  here during the interview.
                 </p>
               </>
 
@@ -490,7 +786,9 @@ function App() {
 
           </div>
 
-          {/* Interview Panel */}
+
+          {/* INTERVIEW PANEL */}
+
           <div className="interview-panel">
 
             <h2>
@@ -501,21 +799,22 @@ function App() {
 
             </h2>
 
-            {/* -------------------------------------------- */}
-            {/* Active Interview */}
-            {/* -------------------------------------------- */}
+
+            {/* ACTIVE INTERVIEW */}
 
             {interviewStarted && (
 
               <>
 
-                {/* Question */}
+                {/* QUESTION */}
+
                 <div className="question-box">
 
                   <div className="question-header">
 
                     <span>
-                      Question {questionNumber}
+                      Question{" "}
+                      {questionNumber}
                     </span>
 
                     {speaking && (
@@ -528,14 +827,17 @@ function App() {
 
                   </div>
 
-                  {/* Progress */}
+
+                  {/* PROGRESS */}
+
                   <div className="question-progress">
 
                     <div
                       className="question-progress-bar"
                       style={{
                         width: `${Math.min(
-                          questionNumber * 10,
+                          questionNumber *
+                            10,
                           100
                         )}%`,
                       }}
@@ -543,13 +845,16 @@ function App() {
 
                   </div>
 
+
                   <h3>
                     {question}
                   </h3>
 
                 </div>
 
-                {/* Session Information */}
+
+                {/* SESSION */}
+
                 <div className="session-info">
 
                   <span>
@@ -559,13 +864,18 @@ function App() {
                   <span>
                     Session:{" "}
                     {sessionId
-                      ? `${sessionId.slice(0, 8)}...`
+                      ? `${sessionId.slice(
+                          0,
+                          8
+                        )}...`
                       : ""}
                   </span>
 
                 </div>
 
-                {/* Voice Status */}
+
+                {/* VOICE STATUS */}
+
                 <div className="voice-status">
 
                   {speaking && (
@@ -594,41 +904,79 @@ function App() {
 
                 </div>
 
-                {/* ---------------------------------------- */}
-                {/* Voice Controls */}
-                {/* ---------------------------------------- */}
+
+                {/* =================================================
+                    SEPARATED CONTROLS
+                    ================================================= */}
 
                 <div className="voice-controls">
 
-                  {!recording &&
-                    !processing &&
-                    !speaking && (
+                  {/* ANSWER CONTROL */}
+
+                  <div className="answer-control-group">
+
+                    {!recording &&
+                      !processing &&
+                      !speaking && (
+
+                        <button
+                          type="button"
+                          className="start-button"
+                          onClick={
+                            startRecording
+                          }
+                          disabled={
+                            !interviewStarted
+                          }
+                        >
+                          🎤 Start Answer
+                        </button>
+
+                      )}
+
+
+                    {recording && (
 
                       <button
+                        type="button"
                         className="start-button"
-                        onClick={startRecording}
+                        onClick={
+                          stopRecording
+                        }
                       >
-                        🎤 Start Answer
+                        ⏹ Stop Recording
                       </button>
 
                     )}
 
-                  {recording && (
+                  </div>
 
-                    <button
-                      className="start-button"
-                      onClick={stopRecording}
-                    >
-                      ⏹ Stop Recording
-                    </button>
 
-                  )}
+                  {/* END INTERVIEW CONTROL */}
+
+                  <div className="end-control-group">
+
+                    {!recording &&
+                      !processing && (
+
+                        <button
+                          type="button"
+                          className="end-interview-button"
+                          onClick={
+                            endInterview
+                          }
+                        >
+                          🛑 End Interview
+                        </button>
+
+                      )}
+
+                  </div>
 
                 </div>
 
-                {/* ---------------------------------------- */}
-                {/* Transcription */}
-                {/* ---------------------------------------- */}
+
+                {/* TRANSCRIPTION */}
 
                 {transcribedAnswer && (
 
@@ -650,23 +998,27 @@ function App() {
 
             )}
 
-            {/* -------------------------------------------- */}
-            {/* Before Interview */}
-            {/* -------------------------------------------- */}
+
+            {/* BEFORE INTERVIEW */}
 
             {!interviewStarted && (
 
               <>
 
                 <p>
-                  EDITH will analyze your answers,
-                  communication, technical knowledge
-                  and identify areas for improvement.
+                  EDITH will analyze your
+                  answers, communication,
+                  technical knowledge and
+                  identify areas for
+                  improvement.
                 </p>
 
                 <button
+                  type="button"
                   className="start-button"
-                  onClick={startInterview}
+                  onClick={
+                    startInterview
+                  }
                 >
                   🎤 Start Interview
                 </button>
@@ -675,7 +1027,9 @@ function App() {
 
             )}
 
-            {/* Error */}
+
+            {/* ERROR */}
+
             {error && (
 
               <p className="error-message">
@@ -690,9 +1044,8 @@ function App() {
 
       </main>
 
-      {/* -------------------------------------------------- */}
-      {/* Footer */}
-      {/* -------------------------------------------------- */}
+
+      {/* FOOTER */}
 
       <footer>
 
@@ -701,6 +1054,63 @@ function App() {
         </p>
 
       </footer>
+
+
+      {/* =========================================================
+          END INTERVIEW CONFIRMATION MODAL
+          ========================================================= */}
+
+      {showEndConfirmation && (
+
+        <div className="confirmation-overlay">
+
+          <div className="confirmation-modal">
+
+            <div className="confirmation-icon">
+              🛑
+            </div>
+
+            <h2>
+              End Interview?
+            </h2>
+
+            <p>
+              Are you sure you want to end
+              this interview and generate
+              your performance report?
+            </p>
+
+            <div className="confirmation-buttons">
+
+              <button
+                type="button"
+                className="continue-button"
+                onClick={() =>
+                  setShowEndConfirmation(
+                    false
+                  )
+                }
+              >
+                Continue Interview
+              </button>
+
+              <button
+                type="button"
+                className="confirm-end-button"
+                onClick={
+                  confirmEndInterview
+                }
+              >
+                🛑 End Interview
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
 
     </div>
   );

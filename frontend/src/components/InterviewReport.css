@@ -1,0 +1,125 @@
+.report-container {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px;
+  box-sizing: border-box;
+}
+
+.report-header {
+  margin-bottom: 32px;
+}
+
+.report-header h1 {
+  font-size: 36px;
+  margin-bottom: 28px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.summary-card {
+  padding: 24px;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+}
+
+.summary-card span {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.summary-card strong {
+  font-size: 28px;
+}
+
+.report-section {
+  margin-top: 32px;
+}
+
+.question-card {
+  padding: 28px;
+  margin-bottom: 24px;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+}
+
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.score {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.question-content p {
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.metrics div {
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+.metrics span {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.metrics strong {
+  font-size: 18px;
+}
+
+.evaluation-block {
+  margin-top: 20px;
+}
+
+.evaluation-block li,
+.report-section li {
+  margin-bottom: 8px;
+}
+
+.feedback {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+}
+
+.feedback p {
+  line-height: 1.6;
+}
+
+@media (max-width: 800px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

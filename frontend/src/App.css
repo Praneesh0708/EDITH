@@ -236,3 +236,395 @@ footer {
   text-align: center;
   font-weight: 600;
 }
+```css
+/* =========================================================
+   EDITH INTERVIEW CONTROLS
+   ========================================================= */
+
+.voice-controls {
+  width: 100%;
+  margin-top: 25px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 18px;
+}
+
+
+/* Answer button area */
+
+.answer-control-group {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+}
+
+
+/* Start Answer / Stop Recording */
+
+.start-button {
+  width: 100%;
+  max-width: 420px;
+
+  padding: 14px 24px;
+
+  border: none;
+  border-radius: 12px;
+
+  background: #2563eb;
+  color: white;
+
+  font-size: 16px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.start-button:hover:not(:disabled) {
+  background: #1d4ed8;
+
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 8px 20px rgba(37, 99, 235, 0.25);
+}
+
+.start-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   END INTERVIEW
+   ========================================================= */
+
+.end-control-group {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+
+  padding-top: 4px;
+}
+
+
+.end-interview-button {
+  width: 100%;
+  max-width: 420px;
+
+  padding: 13px 24px;
+
+  border-radius: 12px;
+
+  border: 1px solid rgba(255, 68, 68, 0.5);
+
+  background: rgba(255, 68, 68, 0.08);
+
+  color: #ff5555;
+
+  font-size: 15px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.end-interview-button:hover {
+  background: #ff4444;
+
+  border-color: #ff4444;
+
+  color: white;
+
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 8px 20px rgba(255, 68, 68, 0.2);
+}
+
+
+/* =========================================================
+   CONFIRMATION MODAL
+   ========================================================= */
+
+.confirmation-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(0, 0, 0, 0.68);
+
+  backdrop-filter: blur(8px);
+
+  z-index: 9999;
+}
+
+
+.confirmation-modal {
+  width: 100%;
+  max-width: 480px;
+
+  padding: 35px;
+
+  box-sizing: border-box;
+
+  border-radius: 20px;
+
+  background: #111827;
+
+  border: 1px solid
+    rgba(255, 255, 255, 0.12);
+
+  box-shadow:
+    0 25px 60px
+    rgba(0, 0, 0, 0.5);
+
+  text-align: center;
+
+  animation:
+    edithModalAppear
+    0.25s
+    ease-out;
+}
+
+
+.confirmation-icon {
+  width: 70px;
+  height: 70px;
+
+  margin: 0 auto 20px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background:
+    rgba(255, 68, 68, 0.12);
+
+  font-size: 30px;
+}
+
+
+.confirmation-modal h2 {
+  margin: 0 0 12px;
+
+  color: #ffffff;
+
+  font-size: 26px;
+}
+
+
+.confirmation-modal p {
+  max-width: 380px;
+
+  margin:
+    0 auto 30px;
+
+  color: #aeb7c5;
+
+  font-size: 15px;
+
+  line-height: 1.6;
+}
+
+
+/* Modal buttons */
+
+.confirmation-buttons {
+  display: flex;
+
+  gap: 14px;
+
+  justify-content: center;
+}
+
+
+.continue-button,
+.confirm-end-button {
+  flex: 1;
+
+  padding: 13px 18px;
+
+  border-radius: 10px;
+
+  font-size: 14px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+
+.continue-button {
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.15);
+
+  background:
+    rgba(255, 255, 255, 0.06);
+
+  color: white;
+}
+
+
+.continue-button:hover {
+  background:
+    rgba(255, 255, 255, 0.12);
+
+  transform:
+    translateY(-1px);
+}
+
+
+.confirm-end-button {
+  border: none;
+
+  background: #ff4444;
+
+  color: white;
+}
+
+
+.confirm-end-button:hover {
+  background: #e93636;
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* =========================================================
+   REPORT
+   ========================================================= */
+
+.report-container {
+  width: 100%;
+
+  margin-top: 30px;
+
+  padding: 25px;
+
+  box-sizing: border-box;
+
+  border-radius: 16px;
+
+  background:
+    rgba(255, 255, 255, 0.04);
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.1);
+
+  overflow-x: auto;
+}
+
+
+.report-output {
+  margin: 0;
+
+  color: inherit;
+
+  font-family:
+    "Courier New",
+    monospace;
+
+  font-size: 14px;
+
+  line-height: 1.7;
+
+  white-space: pre-wrap;
+}
+
+
+.new-interview-container {
+  display: flex;
+
+  justify-content: center;
+
+  margin-top: 25px;
+}
+
+
+/* =========================================================
+   MODAL ANIMATION
+   ========================================================= */
+
+@keyframes edithModalAppear {
+
+  from {
+    opacity: 0;
+
+    transform:
+      translateY(15px)
+      scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .voice-controls {
+    gap: 14px;
+  }
+
+  .start-button,
+  .end-interview-button {
+    max-width: none;
+  }
+
+  .confirmation-modal {
+    padding: 25px;
+  }
+
+  .confirmation-buttons {
+    flex-direction: column;
+  }
+
+  .continue-button,
+  .confirm-end-button {
+    width: 100%;
+  }
+
+}
+```

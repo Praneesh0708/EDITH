@@ -1,231 +1,740 @@
 def generate_interview_report(session: dict):
+    """
+    EDITH Step 32.5.4
 
-    analyses = session.get("analyses", [])
-    face_events = session.get("face_events", [])
+    Generates a question-by-question interview report
+    using the evaluations stored in the session.
+    """
 
-    # ============================================================
-    # FACE MONITORING ANALYSIS
-    # ============================================================
+    questions = session.get(
+        "questions",
+        []
+    )
 
-    total_face_checks = len(face_events)
+    answers = session.get(
+        "answers",
+        []
+    )
 
-    if total_face_checks > 0:
+    analyses = session.get(
+        "analyses",
+        []
+    )
 
-        face_present_events = [
-            event for event in face_events
-            if event.get("face_detected", False)
-        ]
+    evaluations = session.get(
+        "evaluations",
+        []
+    )
 
-        no_face_events = [
-            event for event in face_events
-            if not event.get("face_detected", False)
-        ]
+    question_reports = []
 
-        multiple_face_events = [
-            event for event in face_events
-            if event.get("face_count", 0) > 1
-        ]
+    # ========================================================
+    # QUESTION-BY-QUESTION REPORT
+    # ========================================================
 
-        average_face_count = round(
-            sum(
-                event.get("face_count", 0)
-                for event in face_events
-            ) / total_face_checks,
+    for index, answer in enumerate(answers):
+
+        question = (
+            questions[index]
+            if index < len(questions)
+            else ""
+        )
+
+        analysis = (
+            analyses[index]
+            if index < len(analyses)
+            else {}
+        )
+
+        evaluation = (
+            evaluations[index]
+            if index < len(evaluations)
+            else {}
+        )
+
+        question_report = {
+
+            "question_number":
+                index + 1,
+
+            "question":
+                question,
+
+            "answer":
+                answer,
+
+            "answer_analysis":
+                analysis,
+
+            "human_evaluation":
+                evaluation,
+
+            "score":
+                evaluation.get(
+                    "overall_score",
+                    analysis.get(
+                        "overall_score",
+                        0
+                    )
+                ),
+
+            "correctness":
+                evaluation.get(
+                    "correctness",
+                    0
+                ),
+
+            "relevance":
+                evaluation.get(
+                    "relevance",
+                    0
+                ),
+
+            "technical_understanding":
+                evaluation.get(
+                    "technical_understanding",
+                    0
+                ),
+
+            "completeness":
+                evaluation.get(
+                    "completeness",
+                    0
+                ),
+
+            "reasoning":
+                evaluation.get(
+                    "reasoning",
+                    0
+                ),
+
+            "strengths":
+                evaluation.get(
+                    "strengths",
+                    []
+                ),
+
+            "missing_points":
+                evaluation.get(
+                    "missing_points",
+                    []
+                ),
+
+            "misconceptions":
+                evaluation.get(
+                    "misconceptions",
+                    []
+                ),
+
+            "feedback":
+                evaluation.get(
+                    "feedback",
+                    ""
+                )
+        }
+
+        question_reports.append(
+            question_report
+        )
+
+    # ========================================================
+    # CALCULATE OVERALL SCORE
+    # ========================================================
+
+    scores = []
+
+    for report in question_reports:
+
+        score = report.get(
+            "score",
+            0
+        )
+
+        if isinstance(
+            score,
+            (int, float)
+        ):
+
+            scores.append(
+                score
+            )
+
+    if scores:
+
+        overall_score = round(
+            sum(scores) / len(scores),
             2
         )
 
-        presence_rate = round(
-            (len(face_present_events) / total_face_checks) * 100,
-            1
-        )
-
     else:
 
-        no_face_events = []
-        multiple_face_events = []
+        overall_score = 0
 
-        average_face_count = 0
-        presence_rate = 0
-
-    face_monitoring = {
-        "total_checks": total_face_checks,
-        "presence_rate": presence_rate,
-        "average_face_count": average_face_count,
-        "no_face_events": len(no_face_events),
-        "multiple_face_events": len(multiple_face_events)
-    }
-
-    # ============================================================
-    # ANSWER ANALYSIS
-    # ============================================================
-
-    if not analyses:
-
-        return {
-            "overall_score": 0,
-            "average_relevance": 0,
-            "average_clarity": 0,
-            "average_completeness": 0,
-            "questions_answered": 0,
-
-            "strengths": [],
-            "improvement_areas": [],
-
-            "face_monitoring": face_monitoring,
-
-            "recommendation": (
-                "Not enough answer data to evaluate the interview."
-            )
-        }
-
-    relevance_scores = [
-        analysis.get("relevance", 0)
-        for analysis in analyses
-    ]
-
-    clarity_scores = [
-        analysis.get("clarity", 0)
-        for analysis in analyses
-    ]
-
-    completeness_scores = [
-        analysis.get("completeness", 0)
-        for analysis in analyses
-    ]
-
-    overall_scores = [
-        analysis.get("overall_score", 0)
-        for analysis in analyses
-    ]
-
-    average_relevance = round(
-        sum(relevance_scores) / len(relevance_scores),
-        1
-    )
-
-    average_clarity = round(
-        sum(clarity_scores) / len(clarity_scores),
-        1
-    )
-
-    average_completeness = round(
-        sum(completeness_scores) / len(completeness_scores),
-        1
-    )
-
-    overall_score = round(
-        sum(overall_scores) / len(overall_scores),
-        1
-    )
-
-    # ============================================================
-    # STRENGTHS
-    # ============================================================
+    # ========================================================
+    # COLLECT STRENGTHS
+    # ========================================================
 
     strengths = []
-    improvement_areas = []
 
-    if average_relevance >= 8:
-        strengths.append(
-            "Strong relevance to interview questions."
-        )
+    for report in question_reports:
 
-    if average_clarity >= 8:
-        strengths.append(
-            "Clear and understandable communication."
-        )
+        for item in report.get(
+            "strengths",
+            []
+        ):
 
-    if average_completeness >= 8:
-        strengths.append(
-            "Good level of detail in answers."
-        )
+            if item not in strengths:
 
-    # ============================================================
-    # FACE-BASED OBSERVATIONS
-    # ============================================================
+                strengths.append(
+                    item
+                )
 
-    if total_face_checks > 0:
+    # ========================================================
+    # COLLECT MISSING POINTS
+    # ========================================================
 
-        if presence_rate >= 90:
-            strengths.append(
-                "Consistent face presence during the interview."
-            )
+    missing_points = []
 
-        if multiple_face_events == 0:
-            strengths.append(
-                "No multiple-face events detected."
-            )
+    for report in question_reports:
 
-        if presence_rate < 80:
-            improvement_areas.append(
-                "Maintain consistent presence in front of the camera."
-            )
+        for item in report.get(
+            "missing_points",
+            []
+        ):
 
-        if len(multiple_face_events) > 0:
-            improvement_areas.append(
-                "Multiple faces were detected during some monitoring checks."
-            )
+            if item not in missing_points:
 
-    # ============================================================
-    # ANSWER IMPROVEMENTS
-    # ============================================================
+                missing_points.append(
+                    item
+                )
 
-    if average_relevance < 7:
-        improvement_areas.append(
-            "Improve how directly answers address the question."
-        )
+    # ========================================================
+    # COLLECT MISCONCEPTIONS
+    # ========================================================
 
-    if average_clarity < 7:
-        improvement_areas.append(
-            "Improve answer structure and clarity."
-        )
+    misconceptions = []
 
-    if average_completeness < 7:
-        improvement_areas.append(
-            "Provide more details and concrete examples."
-        )
+    for report in question_reports:
 
-    # ============================================================
-    # RECOMMENDATION
-    # ============================================================
+        for item in report.get(
+            "misconceptions",
+            []
+        ):
+
+            if item not in misconceptions:
+
+                misconceptions.append(
+                    item
+                )
+
+    # ========================================================
+    # PERFORMANCE LEVEL
+    # ========================================================
 
     if overall_score >= 8:
-        recommendation = (
-            "Excellent interview performance."
+
+        performance_level = "Excellent"
+
+    elif overall_score >= 6:
+
+        performance_level = "Good"
+
+    elif overall_score >= 4:
+
+        performance_level = "Needs Improvement"
+
+    else:
+
+        performance_level = "Weak"
+
+    # ========================================================
+    # FINAL REPORT
+    # ========================================================
+
+    return {
+
+        "session_id":
+            session.get(
+                "session_id"
+            ),
+
+        "status":
+            session.get(
+                "status"
+            ),
+
+        "total_questions":
+            len(question_reports),
+
+        "overall_score":
+            overall_score,
+
+        "performance_level":
+            performance_level,
+
+        "strengths":
+            strengths,
+
+        "missing_points":
+            missing_points,
+
+        "misconceptions":
+            misconceptions,
+
+        "question_reports":
+            question_reports
+    }
+
+def format_interview_report(report: dict):
+    """
+    EDITH Step 32.6
+
+    Converts the structured interview report into
+    a human-readable interviewer-style report.
+    """
+
+    lines = []
+
+    lines.append("========================================")
+    lines.append("           EDITH INTERVIEW REPORT")
+    lines.append("========================================")
+
+    lines.append("")
+    lines.append(
+        f"Overall Score: "
+        f"{report.get('overall_score', 0)}/10"
+    )
+
+    lines.append(
+        f"Performance: "
+        f"{report.get('performance_level', 'Unknown')}"
+    )
+
+    lines.append(
+        f"Total Questions: "
+        f"{report.get('total_questions', 0)}"
+    )
+
+    lines.append("")
+    lines.append("----------------------------------------")
+    lines.append("QUESTION-BY-QUESTION EVALUATION")
+    lines.append("----------------------------------------")
+
+    for item in report.get(
+        "question_reports",
+        []
+    ):
+
+        lines.append("")
+
+        lines.append(
+            f"Question {item.get('question_number')}"
         )
 
-    elif overall_score >= 7:
-        recommendation = (
-            "Good interview performance with minor improvements needed."
+        lines.append(
+            f"Q: {item.get('question', '')}"
         )
 
-    elif overall_score >= 5:
-        recommendation = (
-            "Average performance. Further practice is recommended."
+        lines.append(
+            f"A: {item.get('answer', '')}"
+        )
+
+        lines.append(
+            f"Score: {item.get('score', 0)}/10"
+        )
+
+        lines.append(
+            f"Correctness: "
+            f"{item.get('correctness', 0)}/10"
+        )
+
+        lines.append(
+            f"Relevance: "
+            f"{item.get('relevance', 0)}/10"
+        )
+
+        lines.append(
+            f"Technical Understanding: "
+            f"{item.get('technical_understanding', 0)}/10"
+        )
+
+        lines.append(
+            f"Completeness: "
+            f"{item.get('completeness', 0)}/10"
+        )
+
+        lines.append(
+            f"Reasoning: "
+            f"{item.get('reasoning', 0)}/10"
+        )
+
+        # ------------------------------------
+        # Strengths
+        # ------------------------------------
+
+        lines.append("")
+        lines.append("Strengths:")
+
+        strengths = item.get(
+            "strengths",
+            []
+        )
+
+        if strengths:
+
+            for strength in strengths:
+
+                lines.append(
+                    f"  ✓ {strength}"
+                )
+
+        else:
+
+            lines.append(
+                "  None identified."
+            )
+
+        # ------------------------------------
+        # Missing Points
+        # ------------------------------------
+
+        lines.append("")
+        lines.append("Missing Points:")
+
+        missing = item.get(
+            "missing_points",
+            []
+        )
+
+        if missing:
+
+            for point in missing:
+
+                lines.append(
+                    f"  • {point}"
+                )
+
+        else:
+
+            lines.append(
+                "  None identified."
+            )
+
+        # ------------------------------------
+        # Misconceptions
+        # ------------------------------------
+
+        lines.append("")
+        lines.append("Misconceptions:")
+
+        misconceptions = item.get(
+            "misconceptions",
+            []
+        )
+
+        if misconceptions:
+
+            for misconception in misconceptions:
+
+                lines.append(
+                    f"  ⚠ {misconception}"
+                )
+
+        else:
+
+            lines.append(
+                "  None identified."
+            )
+
+        # ------------------------------------
+        # Feedback
+        # ------------------------------------
+
+        lines.append("")
+        lines.append("Interviewer Feedback:")
+
+        lines.append(
+            f"  {item.get('feedback', '')}"
+        )
+
+        lines.append("")
+        lines.append("----------------------------------------")
+
+    # ========================================================
+    # OVERALL STRENGTHS
+    # ========================================================
+
+    lines.append("")
+    lines.append("OVERALL STRENGTHS")
+    lines.append("----------------------------------------")
+
+    strengths = report.get(
+        "strengths",
+        []
+    )
+
+    if strengths:
+
+        for strength in strengths:
+
+            lines.append(
+                f"✓ {strength}"
+            )
+
+    else:
+
+        lines.append(
+            "No major strengths identified."
+        )
+
+    # ========================================================
+    # OVERALL MISSING POINTS
+    # ========================================================
+
+    lines.append("")
+    lines.append("AREAS TO IMPROVE")
+    lines.append("----------------------------------------")
+
+    missing_points = report.get(
+        "missing_points",
+        []
+    )
+
+    if missing_points:
+
+        for point in missing_points:
+
+            lines.append(
+                f"• {point}"
+            )
+
+    else:
+
+        lines.append(
+            "No major missing points identified."
+        )
+
+    # ========================================================
+    # MISCONCEPTIONS
+    # ========================================================
+
+    lines.append("")
+    lines.append("TECHNICAL MISCONCEPTIONS")
+    lines.append("----------------------------------------")
+
+    misconceptions = report.get(
+        "misconceptions",
+        []
+    )
+
+    if misconceptions:
+
+        for misconception in misconceptions:
+
+            lines.append(
+                f"⚠ {misconception}"
+            )
+
+    else:
+
+        lines.append(
+            "No technical misconceptions identified."
+        )
+
+    # ========================================================
+    # FINAL ASSESSMENT
+    # ========================================================
+
+    lines.append("")
+    lines.append("FINAL ASSESSMENT")
+    lines.append("----------------------------------------")
+
+    score = report.get(
+        "overall_score",
+        0
+    )
+
+    if score >= 8:
+
+        feedback = (
+            "The candidate demonstrated strong "
+            "technical understanding and gave "
+            "generally effective answers."
+        )
+
+    elif score >= 6:
+
+        feedback = (
+            "The candidate demonstrated a good "
+            "technical foundation but could improve "
+            "depth and completeness."
+        )
+
+    elif score >= 4:
+
+        feedback = (
+            "The candidate demonstrated partial "
+            "understanding and should strengthen "
+            "technical concepts and explanations."
         )
 
     else:
-        recommendation = (
-            "Needs significant improvement and additional practice."
+
+        feedback = (
+            "The candidate needs significant "
+            "improvement in technical understanding "
+            "and answer quality."
         )
 
-    # ============================================================
-    # FINAL REPORT
-    # ============================================================
+    lines.append(
+        feedback
+    )
 
-    return {
-        "overall_score": overall_score,
+    lines.append("")
+    lines.append("========================================")
+    lines.append("             END OF REPORT")
+    lines.append("========================================")
 
-        "average_relevance": average_relevance,
-        "average_clarity": average_clarity,
-        "average_completeness": average_completeness,
+    return "\n".join(lines)
+# ============================================================
+# TEST 32.5.4
+# ============================================================
 
-        "questions_answered": len(analyses),
+if __name__ == "__main__":
 
-        "strengths": strengths,
-        "improvement_areas": improvement_areas,
+    print("\n📊 EDITH INTERVIEW REPORT TEST")
+    print("================================")
 
-        "face_monitoring": face_monitoring,
+    test_session = {
 
-        "recommendation": recommendation
+        "session_id":
+            "test-session-123",
+
+        "status":
+            "completed",
+
+        "questions": [
+
+            "Why did you use PostgreSQL?",
+
+            "How did you use FastAPI?"
+        ],
+
+        "answers": [
+
+            (
+                "I used PostgreSQL because EDITH "
+                "needs structured data storage."
+            ),
+
+            (
+                "I used FastAPI to create the backend "
+                "APIs and handle requests."
+            )
+        ],
+
+        "analyses": [
+
+            {
+                "overall_score": 8
+            },
+
+            {
+                "overall_score": 9
+            }
+        ],
+
+        "evaluations": [
+
+            {
+                "correctness": 9,
+                "relevance": 9,
+                "technical_understanding": 8,
+                "completeness": 8,
+                "reasoning": 9,
+                "overall_score": 9,
+                "strengths": [
+                    "Clear explanation",
+                    "Connected technology to project"
+                ],
+                "missing_points": [
+                    "Could mention relational structure"
+                ],
+                "misconceptions": [],
+                "feedback":
+                    "Strong technical explanation."
+            },
+
+            {
+                "correctness": 9,
+                "relevance": 10,
+                "technical_understanding": 9,
+                "completeness": 8,
+                "reasoning": 9,
+                "overall_score": 9,
+                "strengths": [
+                    "Good understanding of FastAPI"
+                ],
+                "missing_points": [],
+                "misconceptions": [],
+                "feedback":
+                    "Good explanation of backend usage."
+            }
+        ],
+
+        "face_events": []
     }
+
+    report = generate_interview_report(
+        test_session
+    )
+
+    print("\nOverall Score:")
+    print(
+        report["overall_score"]
+    )
+
+    print("\nPerformance:")
+    print(
+        report["performance_level"]
+    )
+
+    print("\nTotal Questions:")
+    print(
+        report["total_questions"]
+    )
+
+    print("\nQuestion Reports:")
+
+    for item in report[
+        "question_reports"
+    ]:
+
+        print(
+            f"\nQuestion {item['question_number']}:"
+        )
+
+        print(
+            "Score:",
+            item["score"]
+        )
+
+        print(
+            "Feedback:",
+            item["feedback"]
+        )
+
+    print("\nStrengths:")
+    print(
+        report["strengths"]
+    )
+
+    print("\nMissing Points:")
+    print(
+        report["missing_points"]
+    )
+
+    print("\nMisconceptions:")
+    print(
+        report["misconceptions"]
+    )

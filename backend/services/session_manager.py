@@ -2,31 +2,38 @@ import uuid
 
 
 # ============================================================
-# Store Active Interview Sessions
+# ACTIVE INTERVIEW SESSIONS
 # ============================================================
 
 sessions = {}
 
 
 # ============================================================
-# Create Session
+# CREATE SESSION
 # ============================================================
 
 def create_session():
-    session_id = str(uuid.uuid4())
+
+    session_id = str(
+        uuid.uuid4()
+    )
 
     sessions[session_id] = {
+
         "session_id": session_id,
+
         "status": "active",
 
         "questions": [],
+
         "answers": [],
+
         "analyses": [],
 
-        # Face monitoring data
+        "evaluations": [],
+
         "face_events": [],
 
-        # Current question number
         "question_number": 1
     }
 
@@ -34,52 +41,119 @@ def create_session():
 
 
 # ============================================================
-# Get Session
+# GET SESSION
 # ============================================================
 
-def get_session(session_id: str):
-    return sessions.get(session_id)
+def get_session(
+    session_id: str
+):
+
+    return sessions.get(
+        session_id
+    )
 
 
 # ============================================================
-# Add Interview Interaction
+# ADD INTERVIEW INTERACTION
 # ============================================================
 
 def add_interaction(
     session_id: str,
     question: str,
     answer: str,
-    analysis: dict
+    analysis: dict,
+    human_evaluation: dict = None
 ):
-    session = sessions.get(session_id)
+
+    session = sessions.get(
+        session_id
+    )
 
     if not session:
+
         return None
 
-    session["questions"].append(question)
+    session[
+        "questions"
+    ].append(
+        question
+    )
 
-    session["answers"].append(answer)
+    session[
+        "answers"
+    ].append(
+        answer
+    )
 
-    session["analyses"].append(analysis)
+    session[
+        "analyses"
+    ].append(
+        analysis
+    )
 
-    session["question_number"] += 1
+    session[
+        "evaluations"
+    ].append(
+        human_evaluation or {}
+    )
+
+    session[
+        "question_number"
+    ] += 1
 
     return session
 
 
 # ============================================================
-# Get Conversation Memory
+# ADD FACE EVENT
 # ============================================================
 
-def get_conversation_memory(session_id: str):
-    """
-    Build a compact memory of the interview
-    for EDITH's adaptive question engine.
-    """
+def add_face_event(
+    session_id: str,
+    face_detected: bool,
+    face_count: int
+):
 
-    session = sessions.get(session_id)
+    session = sessions.get(
+        session_id
+    )
 
     if not session:
+
+        return None
+
+    event = {
+
+        "face_detected":
+            face_detected,
+
+        "face_count":
+            face_count
+    }
+
+    session[
+        "face_events"
+    ].append(
+        event
+    )
+
+    return event
+
+
+# ============================================================
+# GET CONVERSATION MEMORY
+# ============================================================
+
+def get_conversation_memory(
+    session_id: str
+):
+
+    session = sessions.get(
+        session_id
+    )
+
+    if not session:
+
         return []
 
     memory = []
@@ -99,171 +173,61 @@ def get_conversation_memory(session_id: str):
         []
     )
 
-    # --------------------------------------------------------
-    # Make sure only complete interactions are included
-    # --------------------------------------------------------
-
-    count = min(
-        len(questions),
-        len(answers),
-        len(analyses)
+    evaluations = session.get(
+        "evaluations",
+        []
     )
 
-    # --------------------------------------------------------
-    # Build Memory
-    # --------------------------------------------------------
+    for index, question in enumerate(
+        questions
+    ):
 
-    for i in range(count):
+        if index >= len(
+            answers
+        ):
 
-        analysis = analyses[i]
-
-        if not isinstance(analysis, dict):
-            analysis = {}
+            continue
 
         memory.append({
 
-            "question_number": i + 1,
+            "question":
+                question,
 
-            "question": questions[i],
+            "answer":
+                answers[index],
 
-            "answer": answers[i],
+            "analysis":
+                analyses[index]
+                if index < len(analyses)
+                else {},
 
-            "analysis": {
-
-                "overall_score": analysis.get(
-                    "overall_score",
-                    0
-                ),
-
-                "keywords": analysis.get(
-                    "keywords",
-                    []
-                )
-            }
+            "evaluation":
+                evaluations[index]
+                if index < len(evaluations)
+                else {}
         })
 
     return memory
 
 
 # ============================================================
-# Add Face Monitoring Event
+# END SESSION
 # ============================================================
 
-def add_face_event(
-    session_id: str,
-    face_detected: bool,
-    face_count: int
+def end_session(
+    session_id: str
 ):
-    session = sessions.get(session_id)
 
-    if not session:
-        return None
-
-    event = {
-        "face_detected": face_detected,
-        "face_count": face_count
-    }
-
-    session["face_events"].append(event)
-
-    return event
-
-
-# ============================================================
-# End Session
-# ============================================================
-
-def end_session(session_id: str):
-
-    session = sessions.get(session_id)
-
-    if not session:
-        return None
-
-    session["status"] = "completed"
-
-    return session
-
-
-# ============================================================
-# TEST CONVERSATION MEMORY
-# ============================================================
-
-if __name__ == "__main__":
-
-    session = create_session()
-
-    session_id = session["session_id"]
-
-    # --------------------------------------------------------
-    # Test Interaction 1
-    # --------------------------------------------------------
-
-    add_interaction(
-        session_id,
-
-        "Tell me about yourself.",
-
-        "I am a Python developer.",
-
-        {
-            "overall_score": 8,
-            "keywords": [
-                "python"
-            ]
-        }
-    )
-
-    # --------------------------------------------------------
-    # Test Interaction 2
-    # --------------------------------------------------------
-
-    add_interaction(
-        session_id,
-
-        "How did you use Python?",
-
-        "I used Python with FastAPI.",
-
-        {
-            "overall_score": 9,
-            "keywords": [
-                "python",
-                "fastapi"
-            ]
-        }
-    )
-
-    # --------------------------------------------------------
-    # Get Memory
-    # --------------------------------------------------------
-
-    memory = get_conversation_memory(
+    session = sessions.get(
         session_id
     )
 
-    # --------------------------------------------------------
-    # Display Memory
-    # --------------------------------------------------------
+    if not session:
 
-    print()
-    print("🧠 EDITH CONVERSATION MEMORY")
-    print("============================")
+        return None
 
-    for item in memory:
+    session[
+        "status"
+    ] = "completed"
 
-        print()
-        print(
-            "Question:",
-            item["question"]
-        )
-
-        print(
-            "Answer:",
-            item["answer"]
-        )
-
-        print(
-            "Analysis:",
-            item["analysis"]
-        )
+    return session
