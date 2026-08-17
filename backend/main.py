@@ -28,6 +28,18 @@ app.add_middleware(
 
 
 # --------------------------------
+# API STATUS
+# --------------------------------
+
+@app.get("/api/status")
+def api_status():
+    return {
+        "backend": "online",
+        "status": "success"
+    }
+
+
+# --------------------------------
 # Interview Router
 # --------------------------------
 

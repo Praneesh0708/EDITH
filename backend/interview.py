@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, UploadFile, File, Form
 
 import cv2
@@ -11,36 +12,32 @@ from backend.services.session_manager import (
     add_interaction,
     add_face_event,
     end_session,
-    get_conversation_memory
+    get_conversation_memory,
 )
 
 from backend.services.interview_report import (
     generate_interview_report,
-    format_interview_report
+    format_interview_report,
 )
 
-from backend.services.voice_analyzer import (
-    analyze_voice
-)
+from backend.services.voice_analyzer import analyze_voice
 
-from backend.services.speech_service import (
-    transcribe_audio
-)
+from backend.services.speech_service import transcribe_audio
 
-from backend.services.face_analyzer import (
-    analyze_face
-)
+from backend.services.face_analyzer import analyze_face
 
-from backend.services.context_analyzer import (
-    extract_answer_context
-)
+from backend.services.context_analyzer import extract_answer_context
 
 from backend.services.gemini_question_generator import (
-    generate_gemini_question
+    generate_gemini_question,
 )
 
 from backend.services.human_answer_evaluator import (
-    evaluate_answer_human_like
+    evaluate_answer_human_like,
+)
+
+from backend.services.dynamic_question_generator import (
+    generate_dynamic_question,
 )
 
 
@@ -50,8 +47,216 @@ from backend.services.human_answer_evaluator import (
 
 router = APIRouter(
     prefix="/interview",
-    tags=["Interview"]
+    tags=["Interview"],
 )
+
+
+# ============================================================
+# HELPER - NORMALIZE QUESTION
+# ============================================================
+
+def normalize_question(question):
+    if not isinstance(question, str):
+        return ""
+
+    return (
+        question
+        .strip()
+        .lower()
+        .replace("?", "")
+        .replace(".", "")
+        .replace(",", "")
+        .replace("!", "")
+        .replace(":", "")
+        .replace(";", "")
+    )
+
+
+# ============================================================
+# HELPER - CHECK DUPLICATE QUESTION
+# ============================================================
+
+def question_already_asked(
+    session,
+    question,
+):
+    new_question = normalize_question(question)
+
+    if not new_question:
+        return True
+
+    for old_question in session.get(
+        "questions",
+        [],
+    ):
+        old_normalized = normalize_question(
+            old_question
+        )
+
+        if old_normalized == new_question:
+            return True
+
+    return False
+
+
+# ============================================================
+# HELPER - GET UNIQUE QUESTION
+# ============================================================
+
+def get_unique_question(
+    session,
+    generated_question,
+    previous_question,
+    answer,
+    context,
+    analysis,
+):
+    """
+    Prevent Gemini from returning a question
+    that already exists in the interview.
+
+    If Gemini repeats a question, use the
+    dynamic question generator instead.
+    """
+
+    if isinstance(
+        generated_question,
+        dict,
+    ):
+        candidate = generated_question.get(
+            "question",
+            "",
+        )
+    else:
+        candidate = str(
+            generated_question or ""
+        )
+
+    candidate = candidate.strip()
+
+    # --------------------------------------------------------
+    # Gemini produced a new question
+    # --------------------------------------------------------
+
+    if (
+        candidate
+        and not question_already_asked(
+            session,
+            candidate,
+        )
+    ):
+        if isinstance(
+            generated_question,
+            dict,
+        ):
+            return generated_question
+
+        return {
+            "status": "success",
+            "question": candidate,
+            "difficulty": "medium",
+            "source": "gemini",
+        }
+
+    # --------------------------------------------------------
+    # Gemini repeated a question
+    # --------------------------------------------------------
+
+    print(
+        "⚠️ Gemini generated a repeated question."
+    )
+
+    print(
+        "🔄 Switching to dynamic question generator."
+    )
+
+    # Build temporary list of previous questions
+    asked_questions = session.get(
+        "questions",
+        [],
+    )
+
+    dynamic_result = generate_dynamic_question(
+        previous_question=previous_question,
+        answer=answer,
+        context=context,
+        analysis=analysis,
+    )
+
+    if isinstance(
+        dynamic_result,
+        dict,
+    ):
+        dynamic_question = dynamic_result.get(
+            "question",
+            "",
+        )
+    else:
+        dynamic_question = str(
+            dynamic_result or ""
+        )
+
+    # --------------------------------------------------------
+    # Dynamic generator produced a unique question
+    # --------------------------------------------------------
+
+    if (
+        dynamic_question
+        and not question_already_asked(
+            session,
+            dynamic_question,
+        )
+    ):
+        if isinstance(
+            dynamic_result,
+            dict,
+        ):
+            return dynamic_result
+
+        return {
+            "status": "fallback",
+            "question": dynamic_question,
+            "difficulty": "medium",
+            "source": "dynamic",
+        }
+
+    # --------------------------------------------------------
+    # Final guaranteed unique fallback
+    # --------------------------------------------------------
+
+    question_number = (
+        len(asked_questions) + 1
+    )
+
+    fallback_question = (
+        "Based on your previous answer, "
+        "what is one technical decision you "
+        f"would improve if you had another chance "
+        f"in question {question_number}?"
+    )
+
+    # Make absolutely sure it is unique
+    counter = 1
+
+    while question_already_asked(
+        session,
+        fallback_question,
+    ):
+        counter += 1
+
+        fallback_question = (
+            "What is another technical lesson "
+            f"you gained from your experience "
+            f"that you have not discussed yet "
+            f"({counter})?"
+        )
+
+    return {
+        "status": "fallback",
+        "question": fallback_question,
+        "difficulty": "medium",
+        "source": "unique_fallback",
+    }
 
 
 # ============================================================
@@ -63,7 +268,7 @@ def interview_home():
 
     return {
         "status": "success",
-        "message": "EDITH Interview Engine is ready"
+        "message": "EDITH Interview Engine is ready",
     }
 
 
@@ -76,7 +281,9 @@ def start_interview():
 
     session = create_session()
 
-    first_question = "Tell me about yourself."
+    first_question = (
+        "Tell me about yourself."
+    )
 
     session["questions"].append(
         first_question
@@ -87,7 +294,7 @@ def start_interview():
         "message": "Interview started",
         "session_id": session["session_id"],
         "question_number": 1,
-        "question": first_question
+        "question": first_question,
     }
 
 
@@ -98,16 +305,14 @@ def start_interview():
 @router.post("/answer")
 def submit_answer(data: dict):
 
-    session_id = data.get("session_id")
+    session_id = data.get(
+        "session_id"
+    )
 
     answer = data.get(
         "answer",
-        ""
+        "",
     )
-
-    # --------------------------------------------------------
-    # Get Session
-    # --------------------------------------------------------
 
     session = get_session(
         session_id
@@ -117,72 +322,81 @@ def submit_answer(data: dict):
 
         return {
             "status": "error",
-            "message": "Invalid session ID"
+            "message": "Invalid session ID",
         }
 
     # --------------------------------------------------------
-    # Get Current Question
+    # Current question
     # --------------------------------------------------------
 
-    question_number = session[
-        "question_number"
-    ]
+    question_number = session.get(
+        "question_number",
+        1,
+    )
 
-    if question_number > len(
-        session["questions"]
+    questions = session.get(
+        "questions",
+        [],
+    )
+
+    if not questions:
+
+        question = (
+            "Tell me about yourself."
+        )
+
+    elif question_number > len(
+        questions
     ):
 
-        question = session[
-            "questions"
-        ][-1]
+        question = questions[-1]
 
     else:
 
-        question = session[
-            "questions"
-        ][question_number - 1]
+        question = questions[
+            question_number - 1
+        ]
 
     # --------------------------------------------------------
-    # Analyze Answer
+    # Analyze answer
     # --------------------------------------------------------
 
     analysis = analyze_answer(
         question,
-        answer
+        answer,
     )
-
-    # --------------------------------------------------------
-    # Extract Context
-    # --------------------------------------------------------
 
     context = extract_answer_context(
         answer
     )
 
     # --------------------------------------------------------
-    # HUMAN-LIKE GEMINI EVALUATION
+    # Human evaluation
     # --------------------------------------------------------
 
-    human_evaluation = evaluate_answer_human_like(
-        question=question,
-        answer=answer,
-        context=context,
-        analysis=analysis
+    human_evaluation = (
+        evaluate_answer_human_like(
+            question=question,
+            answer=answer,
+            context=context,
+            analysis=analysis,
+        )
     )
 
     # --------------------------------------------------------
-    # Store Interaction
+    # Store interaction
     # --------------------------------------------------------
 
     add_interaction(
         session_id,
         question,
         answer,
-        analysis
+        analysis,
+        human_evaluation,
     )
 
     # --------------------------------------------------------
-    # Get Conversation Memory
+    # Conversation memory
     # --------------------------------------------------------
 
     conversation_memory = (
@@ -192,33 +406,61 @@ def submit_answer(data: dict):
     )
 
     # --------------------------------------------------------
-    # Generate Personalized Question
+    # Generate Gemini question
     # --------------------------------------------------------
 
-    next_question = generate_gemini_question(
-
-        previous_question=question,
-
-        answer=answer,
-
-        context=context,
-
-        analysis=analysis,
-
-        conversation_memory=conversation_memory
+    generated_question = (
+        generate_gemini_question(
+            previous_question=question,
+            answer=answer,
+            context=context,
+            analysis=analysis,
+            conversation_memory=conversation_memory,
+        )
     )
 
     # --------------------------------------------------------
-    # Store Generated Question
+    # GUARANTEE UNIQUE QUESTION
     # --------------------------------------------------------
 
-    if next_question.get("question"):
+    next_question = get_unique_question(
+        session=session,
+        generated_question=generated_question,
+        previous_question=question,
+        answer=answer,
+        context=context,
+        analysis=analysis,
+    )
 
-        session[
-            "questions"
-        ].append(
-            next_question["question"]
-        )
+    # --------------------------------------------------------
+    # Store next question
+    # --------------------------------------------------------
+
+    if next_question.get(
+        "question"
+    ):
+
+        new_question = next_question[
+            "question"
+        ]
+
+        if not question_already_asked(
+            session,
+            new_question,
+        ):
+
+            session[
+                "questions"
+            ].append(
+                new_question
+            )
+
+            # Move session to next question
+            session[
+                "question_number"
+            ] = len(
+                session["questions"]
+            )
 
     # --------------------------------------------------------
     # Response
@@ -246,7 +488,7 @@ def submit_answer(data: dict):
 
         "conversation_memory": conversation_memory,
 
-        "next_question": next_question
+        "next_question": next_question,
     }
 
 
@@ -256,7 +498,7 @@ def submit_answer(data: dict):
 
 @router.get("/session/{session_id}")
 def get_interview_session(
-    session_id: str
+    session_id: str,
 ):
 
     session = get_session(
@@ -267,12 +509,12 @@ def get_interview_session(
 
         return {
             "status": "error",
-            "message": "Session not found"
+            "message": "Session not found",
         }
 
     return {
         "status": "success",
-        "session": session
+        "session": session,
     }
 
 
@@ -282,7 +524,7 @@ def get_interview_session(
 
 @router.post("/end/{session_id}")
 def finish_interview(
-    session_id: str
+    session_id: str,
 ):
 
     session = end_session(
@@ -293,15 +535,19 @@ def finish_interview(
 
         return {
             "status": "error",
-            "message": "Session not found"
+            "message": "Session not found",
         }
 
     report = generate_interview_report(
         session
     )
-    formatted_report = format_interview_report(
-        report
+
+    formatted_report = (
+        format_interview_report(
+            report
+        )
     )
+
     return {
 
         "status": "success",
@@ -312,7 +558,7 @@ def finish_interview(
 
         "report": report,
 
-        "formatted_report": formatted_report
+        "formatted_report": formatted_report,
     }
 
 
@@ -322,7 +568,7 @@ def finish_interview(
 
 @router.post("/voice")
 def analyze_voice_answer(
-    audio_file: UploadFile = File(...)
+    audio_file: UploadFile = File(...),
 ):
 
     result = analyze_voice(
@@ -335,12 +581,12 @@ def analyze_voice_answer(
 
         "message": "Voice analyzed",
 
-        "voice_analysis": result
+        "voice_analysis": result,
     }
 
 
 # ============================================================
-# VOICE ANSWER + WHISPER TRANSCRIPTION
+# VOICE ANSWER
 # ============================================================
 
 @router.post("/voice-answer")
@@ -348,11 +594,11 @@ async def voice_answer(
 
     session_id: str = Form(...),
 
-    audio_file: UploadFile = File(...)
+    audio_file: UploadFile = File(...),
 ):
 
     # --------------------------------------------------------
-    # Get Session
+    # Get session
     # --------------------------------------------------------
 
     session = get_session(
@@ -363,11 +609,11 @@ async def voice_answer(
 
         return {
             "status": "error",
-            "message": "Invalid session ID"
+            "message": "Invalid session ID",
         }
 
     # --------------------------------------------------------
-    # Save Uploaded Audio
+    # Save audio
     # --------------------------------------------------------
 
     filename = (
@@ -377,7 +623,7 @@ async def voice_answer(
 
     with open(
         filename,
-        "wb"
+        "wb",
     ) as f:
 
         f.write(
@@ -385,88 +631,94 @@ async def voice_answer(
         )
 
     # --------------------------------------------------------
-    # Whisper Transcription
+    # Whisper
     # --------------------------------------------------------
 
     answer = transcribe_audio(
         filename
     )
 
-    # --------------------------------------------------------
-    # Convert Whisper Result To Text
-    # --------------------------------------------------------
-
     if isinstance(
         answer,
-        dict
+        dict,
     ):
 
         answer = answer.get(
             "text",
-            ""
+            "",
         )
 
     if not isinstance(
         answer,
-        str
+        str,
     ):
 
-        answer = str(answer)
+        answer = str(
+            answer
+        )
 
     answer = answer.strip()
 
     # --------------------------------------------------------
-    # Get Current Question
+    # Current question
     # --------------------------------------------------------
 
-    question_number = session[
-        "question_number"
-    ]
+    question_number = session.get(
+        "question_number",
+        1,
+    )
 
-    if question_number > len(
-        session["questions"]
+    questions = session.get(
+        "questions",
+        [],
+    )
+
+    if not questions:
+
+        question = (
+            "Tell me about yourself."
+        )
+
+    elif question_number > len(
+        questions
     ):
 
-        question = session[
-            "questions"
-        ][-1]
+        question = questions[-1]
 
     else:
 
-        question = session[
-            "questions"
-        ][question_number - 1]
+        question = questions[
+            question_number - 1
+        ]
 
     # --------------------------------------------------------
-    # Analyze Answer
+    # Analyze answer
     # --------------------------------------------------------
 
     analysis = analyze_answer(
         question,
-        answer
+        answer,
     )
-
-    # --------------------------------------------------------
-    # Extract Context
-    # --------------------------------------------------------
 
     context = extract_answer_context(
         answer
     )
 
     # --------------------------------------------------------
-    # HUMAN-LIKE GEMINI EVALUATION
+    # Human evaluation
     # --------------------------------------------------------
 
-    human_evaluation = evaluate_answer_human_like(
-        question=question,
-        answer=answer,
-        context=context,
-        analysis=analysis
+    human_evaluation = (
+        evaluate_answer_human_like(
+            question=question,
+            answer=answer,
+            context=context,
+            analysis=analysis,
+        )
     )
 
     # --------------------------------------------------------
-    # Store Interaction
+    # Store interaction
     # --------------------------------------------------------
 
     add_interaction(
@@ -474,11 +726,11 @@ async def voice_answer(
         question,
         answer,
         analysis,
-        human_evaluation
+        human_evaluation,
     )
 
     # --------------------------------------------------------
-    # Get Conversation Memory
+    # Conversation memory
     # --------------------------------------------------------
 
     conversation_memory = (
@@ -488,36 +740,63 @@ async def voice_answer(
     )
 
     # --------------------------------------------------------
-    # Generate Gemini Question
+    # Generate Gemini question
     # --------------------------------------------------------
 
-    next_question = generate_gemini_question(
-
-        previous_question=question,
-
-        answer=answer,
-
-        context=context,
-
-        analysis=analysis,
-
-        conversation_memory=conversation_memory
+    generated_question = (
+        generate_gemini_question(
+            previous_question=question,
+            answer=answer,
+            context=context,
+            analysis=analysis,
+            conversation_memory=conversation_memory,
+        )
     )
 
     # --------------------------------------------------------
-    # Store Next Question
+    # GUARANTEE UNIQUE QUESTION
     # --------------------------------------------------------
 
-    if next_question.get("question"):
-
-        session[
-            "questions"
-        ].append(
-            next_question["question"]
-        )
+    next_question = get_unique_question(
+        session=session,
+        generated_question=generated_question,
+        previous_question=question,
+        answer=answer,
+        context=context,
+        analysis=analysis,
+    )
 
     # --------------------------------------------------------
-    # Return Result
+    # Store next question
+    # --------------------------------------------------------
+
+    if next_question.get(
+        "question"
+    ):
+
+        new_question = next_question[
+            "question"
+        ]
+
+        if not question_already_asked(
+            session,
+            new_question,
+        ):
+
+            session[
+                "questions"
+            ].append(
+                new_question
+            )
+
+            session[
+                "question_number"
+            ] = len(
+                session["questions"]
+            )
+
+    # --------------------------------------------------------
+    # Response
     # --------------------------------------------------------
 
     return {
@@ -540,7 +819,7 @@ async def voice_answer(
 
         "conversation_memory": conversation_memory,
 
-        "next_question": next_question
+        "next_question": next_question,
     }
 
 
@@ -553,12 +832,8 @@ async def analyze_face_frame(
 
     session_id: str,
 
-    image_file: UploadFile = File(...)
+    image_file: UploadFile = File(...),
 ):
-
-    # --------------------------------------------------------
-    # Get Interview Session
-    # --------------------------------------------------------
 
     session = get_session(
         session_id
@@ -568,51 +843,33 @@ async def analyze_face_frame(
 
         return {
             "status": "error",
-            "message": "Invalid session ID"
+            "message": "Invalid session ID",
         }
 
-    # --------------------------------------------------------
-    # Read Uploaded Image
-    # --------------------------------------------------------
-
-    image_bytes = await image_file.read()
-
-    # --------------------------------------------------------
-    # Convert Image Bytes To NumPy Array
-    # --------------------------------------------------------
+    image_bytes = (
+        await image_file.read()
+    )
 
     image_array = np.frombuffer(
         image_bytes,
-        np.uint8
+        np.uint8,
     )
-
-    # --------------------------------------------------------
-    # Decode Image
-    # --------------------------------------------------------
 
     image = cv2.imdecode(
         image_array,
-        cv2.IMREAD_COLOR
+        cv2.IMREAD_COLOR,
     )
 
     if image is None:
 
         return {
             "status": "error",
-            "message": "Invalid image file"
+            "message": "Invalid image file",
         }
-
-    # --------------------------------------------------------
-    # Analyze Face
-    # --------------------------------------------------------
 
     result = analyze_face(
         image
     )
-
-    # --------------------------------------------------------
-    # Store Face Event
-    # --------------------------------------------------------
 
     add_face_event(
 
@@ -620,18 +877,14 @@ async def analyze_face_frame(
 
         result.get(
             "face_detected",
-            False
+            False,
         ),
 
         result.get(
             "face_count",
-            0
-        )
+            0,
+        ),
     )
-
-    # --------------------------------------------------------
-    # Return Result
-    # --------------------------------------------------------
 
     return {
 
@@ -643,5 +896,5 @@ async def analyze_face_frame(
 
         "session_id": session_id,
 
-        "face_analysis": result
+        "face_analysis": result,
     }

@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
@@ -16,8 +15,7 @@ function App() {
 
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState("");
-  const [questionNumber, setQuestionNumber] =
-    useState(0);
+  const [questionNumber, setQuestionNumber] = useState(0);
 
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -55,7 +53,9 @@ function App() {
   // =========================================================
 
   const speakQuestion = (text) => {
-    if (!text) return;
+    if (!text || !text.trim()) {
+      return;
+    }
 
     window.speechSynthesis.cancel();
 
@@ -79,6 +79,96 @@ function App() {
     };
 
     window.speechSynthesis.speak(utterance);
+  };
+
+  // =========================================================
+  // EXTRACT NEXT QUESTION SAFELY
+  // =========================================================
+
+  const extractNextQuestion = (data) => {
+    console.log(
+      "Checking next question from response:",
+      data
+    );
+
+    // Format 1:
+    // next_question: "What is Python?"
+    if (
+      typeof data.next_question === "string" &&
+      data.next_question.trim()
+    ) {
+      return data.next_question.trim();
+    }
+
+    // Format 2:
+    // next_question: { question: "What is Python?" }
+    if (
+      data.next_question &&
+      typeof data.next_question === "object"
+    ) {
+      if (
+        typeof data.next_question.question === "string" &&
+        data.next_question.question.trim()
+      ) {
+        return data.next_question.question.trim();
+      }
+
+      if (
+        typeof data.next_question.text === "string" &&
+        data.next_question.text.trim()
+      ) {
+        return data.next_question.text.trim();
+      }
+
+      if (
+        typeof data.next_question.content === "string" &&
+        data.next_question.content.trim()
+      ) {
+        return data.next_question.content.trim();
+      }
+    }
+
+    // Format 3:
+    // question: "What is Python?"
+    if (
+      typeof data.question === "string" &&
+      data.question.trim()
+    ) {
+      return data.question.trim();
+    }
+
+    // Format 4:
+    // data: { next_question: ... }
+    if (
+      data.data &&
+      typeof data.data === "object"
+    ) {
+      if (
+        typeof data.data.next_question === "string" &&
+        data.data.next_question.trim()
+      ) {
+        return data.data.next_question.trim();
+      }
+
+      if (
+        data.data.next_question &&
+        typeof data.data.next_question === "object" &&
+        typeof data.data.next_question.question === "string" &&
+        data.data.next_question.question.trim()
+      ) {
+        return data.data.next_question.question.trim();
+      }
+
+      if (
+        typeof data.data.question === "string" &&
+        data.data.question.trim()
+      ) {
+        return data.data.question.trim();
+      }
+    }
+
+    // Nothing usable was returned
+    return "";
   };
 
   // =========================================================
@@ -129,8 +219,19 @@ function App() {
         );
       }
 
+      const firstQuestion =
+        data.question || "";
+
+      if (!firstQuestion.trim()) {
+        throw new Error(
+          "Backend did not return the first interview question."
+        );
+      }
+
       setSessionId(data.session_id);
-      setQuestion(data.question || "");
+
+      setQuestion(firstQuestion);
+
       setQuestionNumber(
         data.question_number || 1
       );
@@ -140,7 +241,7 @@ function App() {
       setReport(null);
       setTranscribedAnswer("");
 
-      speakQuestion(data.question);
+      speakQuestion(firstQuestion);
 
     } catch (err) {
       console.error(err);
@@ -268,9 +369,7 @@ function App() {
   // SEND VOICE ANSWER
   // =========================================================
 
-  const sendVoiceAnswer = async (
-    audioBlob
-  ) => {
+  const sendVoiceAnswer = async (audioBlob) => {
     try {
       setProcessing(true);
       setError("");
@@ -325,16 +424,30 @@ function App() {
         );
       }
 
+      // -----------------------------------------------------
+      // SAVE TRANSCRIPTION
+      // -----------------------------------------------------
+
       setTranscribedAnswer(
         data.transcribed_answer || ""
       );
 
-      // Get next question
-      if (data.next_question) {
-        const nextQuestion =
-          data.next_question.question ||
-          data.next_question ||
-          "";
+      // -----------------------------------------------------
+      // GET NEXT QUESTION SAFELY
+      // -----------------------------------------------------
+
+      const nextQuestion =
+        extractNextQuestion(data);
+
+      console.log(
+        "EXTRACTED NEXT QUESTION:",
+        nextQuestion
+      );
+
+      if (nextQuestion) {
+        // IMPORTANT:
+        // Only replace the current question
+        // when a real question was received.
 
         setQuestion(nextQuestion);
 
@@ -344,6 +457,20 @@ function App() {
         );
 
         speakQuestion(nextQuestion);
+
+        setError("");
+
+      } else {
+        // Do NOT set question to blank.
+        // Keep the current question visible.
+
+        console.warn(
+          "No next question was returned by backend."
+        );
+
+        setError(
+          "Answer processed, but the backend did not return the next question."
+        );
       }
 
     } catch (err) {
@@ -378,6 +505,13 @@ function App() {
     if (recording) {
       setError(
         "Please stop recording before ending the interview."
+      );
+      return;
+    }
+
+    if (processing) {
+      setError(
+        "Please wait until answer processing is complete."
       );
       return;
     }
@@ -836,8 +970,7 @@ function App() {
                       className="question-progress-bar"
                       style={{
                         width: `${Math.min(
-                          questionNumber *
-                            10,
+                          questionNumber * 10,
                           100
                         )}%`,
                       }}
@@ -847,7 +980,8 @@ function App() {
 
 
                   <h3>
-                    {question}
+                    {question ||
+                      "Waiting for next question..."}
                   </h3>
 
                 </div>
@@ -905,9 +1039,7 @@ function App() {
                 </div>
 
 
-                {/* =================================================
-                    SEPARATED CONTROLS
-                    ================================================= */}
+                {/* SEPARATED CONTROLS */}
 
                 <div className="voice-controls">
 
@@ -1056,9 +1188,7 @@ function App() {
       </footer>
 
 
-      {/* =========================================================
-          END INTERVIEW CONFIRMATION MODAL
-          ========================================================= */}
+      {/* END INTERVIEW CONFIRMATION MODAL */}
 
       {showEndConfirmation && (
 
@@ -1086,9 +1216,7 @@ function App() {
                 type="button"
                 className="continue-button"
                 onClick={() =>
-                  setShowEndConfirmation(
-                    false
-                  )
+                  setShowEndConfirmation(false)
                 }
               >
                 Continue Interview
